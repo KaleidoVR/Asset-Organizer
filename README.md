@@ -97,4 +97,6 @@ Created and maintained by **KaleidoVR**.
 
 ## License
 
-[MIT](LICENSE) — Copyright (c) 2026 KaleidoVR
+Copyright (c) 2026 KaleidoVR. All rights reserved.
+
+Free to use in your own projects, personal or commercial, including commission work. Please don't modify it, sell it, or bundle it into products or avatar downloads — link people to the repo instead so they get the current version.
