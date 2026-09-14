@@ -1,6 +1,8 @@
 What's new
 
+1.2.2
+The window title and header show Asset Organizer 1.2.2.
+
 1.2.1
-The window title and header show Asset Organizer (1.2.1).
 Clear Log Cache deletes Organizer logs after a confirm prompt.
 Scripts and README say all rights reserved.
