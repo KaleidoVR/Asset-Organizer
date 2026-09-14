@@ -192,6 +192,7 @@ namespace KaleidoVR.EditorTools
             GUILayout.Space(5);
             KaleidoAssetOrganizerUI.DrawOrganizeButton(this);
             KaleidoAssetOrganizerUI.DrawDiscordButton();
+            KaleidoAssetOrganizerUI.DrawClearLogCacheButton();
             KaleidoAssetOrganizerUI.DrawFooter(this);
 
             // If you change a dropdown toggle or directory text box choice field path, save it immediately
@@ -214,9 +215,10 @@ namespace KaleidoVR.EditorTools
             float organizeButtonHeight = 55f;
             float creditsButtonHeight = 26f;
             float discordButtonHeight = 28f;
+            float clearLogCacheHeight = 24f;
             float footerHeight = 25f;
 
-            float totalHeight = logoHeight + outputDirHeight + settingsHeight + objectsHeight + organizeOptionsHeight + ignoreListHeight + organizeButtonHeight + creditsButtonHeight + discordButtonHeight + footerHeight;
+            float totalHeight = logoHeight + outputDirHeight + settingsHeight + objectsHeight + organizeOptionsHeight + ignoreListHeight + organizeButtonHeight + creditsButtonHeight + discordButtonHeight + clearLogCacheHeight + footerHeight;
 
             Vector2 targetSize = new Vector2(500, totalHeight);
             minSize = targetSize;
@@ -533,8 +535,7 @@ namespace KaleidoVR.EditorTools
     {
         public static void OrganizeAssets(KaleidoAssetOrganizer window)
         {
-            string projectRoot = GetProjectRootPath();
-            string logDir = Path.Combine(projectRoot, "Logs", "KaleidoVR", "Organizer");
+            string logDir = GetOrganizerLogDirectory();
             Directory.CreateDirectory(logDir);
             string logFile = Path.Combine(logDir, DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss") + "_organizer_log.txt");
 
@@ -1858,6 +1859,77 @@ namespace KaleidoVR.EditorTools
                 return dataPath.Substring(0, dataPath.Length - "Assets".Length);
             }
             return Directory.GetParent(Application.dataPath)?.FullName ?? Application.dataPath;
+        }
+
+        private static string GetOrganizerLogDirectory()
+        {
+            return Path.Combine(GetProjectRootPath(), "Logs", "KaleidoVR", "Organizer");
+        }
+
+        public static void ClearOrganizerLogs()
+        {
+            string logDir = GetOrganizerLogDirectory();
+            string[] files = Directory.Exists(logDir)
+                ? Directory.GetFiles(logDir, "*", SearchOption.TopDirectoryOnly)
+                : Array.Empty<string>();
+
+            if (files.Length == 0)
+            {
+                EditorUtility.DisplayDialog(
+                    "KaleidoVR Asset Organizer",
+                    "There are no Organizer logs to clear.\n\nLogs are written to Logs/KaleidoVR/Organizer/ when you organize.",
+                    "OK");
+                return;
+            }
+
+            string fileWord = files.Length == 1 ? "log file" : "log files";
+            bool confirmed = EditorUtility.DisplayDialog(
+                "KaleidoVR Asset Organizer",
+                "Delete " + files.Length + " Organizer " + fileWord + " from Logs/KaleidoVR/Organizer/?\n\nThis cannot be undone.",
+                "Clear Logs",
+                "Cancel");
+            if (!confirmed) return;
+
+            int deleted = 0;
+            int failed = 0;
+            foreach (string file in files)
+            {
+                try
+                {
+                    File.Delete(file);
+                    deleted++;
+                }
+                catch (Exception)
+                {
+                    failed++;
+                }
+            }
+
+            try
+            {
+                if (Directory.Exists(logDir) && Directory.GetFiles(logDir).Length == 0 && Directory.GetDirectories(logDir).Length == 0)
+                {
+                    Directory.Delete(logDir);
+                }
+            }
+            catch (Exception)
+            {
+            }
+
+            if (failed == 0)
+            {
+                EditorUtility.DisplayDialog(
+                    "KaleidoVR Asset Organizer",
+                    deleted == 1 ? "Cleared 1 Organizer log file." : "Cleared " + deleted + " Organizer log files.",
+                    "OK");
+            }
+            else
+            {
+                EditorUtility.DisplayDialog(
+                    "KaleidoVR Asset Organizer",
+                    "Cleared " + deleted + " Organizer log file(s). " + failed + " could not be deleted (they may still be open).",
+                    "OK");
+            }
         }
 
         private static GameObject TryInstantiatePrefab(UnityEngine.Object prefabAsset)
@@ -3717,6 +3789,18 @@ namespace KaleidoVR.EditorTools
 
         public static void DrawOrganizeButton(KaleidoAssetOrganizer window) { if (GUILayout.Button("Organize Assets", GUILayout.Height(35))) KaleidoAssetOrganizerLogic.OrganizeAssets(window); }
         public static void DrawDiscordButton() { GUILayout.Space(2); if (GUILayout.Button("💬 Join the Discord Server", GUILayout.Height(24))) Application.OpenURL("https://discord.com/invite/cRsufJssTA"); }
+        public static void DrawClearLogCacheButton()
+        {
+            GUILayout.Space(2);
+            EditorGUILayout.BeginHorizontal();
+            GUILayout.FlexibleSpace();
+            if (GUILayout.Button("Clear Log Cache", EditorStyles.miniButton, GUILayout.Width(120), GUILayout.Height(18)))
+            {
+                KaleidoAssetOrganizerLogic.ClearOrganizerLogs();
+            }
+            GUILayout.FlexibleSpace();
+            EditorGUILayout.EndHorizontal();
+        }
         public static void DrawFooter(KaleidoAssetOrganizer window) { GUILayout.Space(5); if (GUILayout.Button("Visit kalivr.com", EditorStyles.centeredGreyMiniLabel)) Application.OpenURL("https://kalivr.com"); }
     }
 }
