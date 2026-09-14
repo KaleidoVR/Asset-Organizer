@@ -33,7 +33,7 @@ The VRChat SDK3 Avatars package is only needed for the **Auto-Link FX & Menu** o
 
 1. Set **Output Directory** with **Select Folder**. It must be inside `Assets`.
 2. Drag your avatar into **Objects to Organize**. Project FBX/prefab assets work, and so do scene instances — those resolve back to their source asset.
-3. Optionally set **Scene Name** and **Prefab Name**, and drag anything you want untouched into the **Ignore List**.
+3. Optionally set **Scene Name** and **Prefab Name**, and drag anything you want left out of the new prefab and scene into the **Ignore List**.
 4. Press **Organize Assets**.
 
 The **Scene Name** and **Prefab Name** fields auto-fill from the first object you drop in. Organizing always writes a scene named after **Scene Name**. **Create Prefab** also writes a prefab into `<output>/Prefabs/` and places that prefab into the scene.
