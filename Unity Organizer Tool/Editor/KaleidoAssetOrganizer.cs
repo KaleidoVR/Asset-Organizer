@@ -22,6 +22,7 @@ namespace KaleidoVR.EditorTools
     {
         // Each digit rolls 0-9. After 1.0.9 comes 1.1.0; after 1.9.9 comes 2.0.0.
         public static readonly string VERSION = "1.2.0";
+        public static string ReleaseName { get { return "Asset Organizer (" + VERSION + ")"; } }
         public const string LOGO_FILE_NAME = "Kali_Logo.png";
         public const string FALLBACK_ICON_PATH = "Assets/KaleidoVR/Editor/Icons/Kali_Logo.png";
 
@@ -69,7 +70,8 @@ namespace KaleidoVR.EditorTools
         [MenuItem("KaleidoVR/Asset Organizer", false, 100)]
         public static void ShowWindow()
         {
-            var window = GetWindow<KaleidoAssetOrganizer>("Asset Organizer");
+            var window = GetWindow<KaleidoAssetOrganizer>(ReleaseName);
+            window.titleContent = new GUIContent(ReleaseName);
             window.InitializeLocalLogo();
             window.LoadEditorPreferences(); // Load saved properties on window instantiation
             window.ResizeWindow();
@@ -77,6 +79,7 @@ namespace KaleidoVR.EditorTools
 
         private void OnEnable()
         {
+            titleContent = new GUIContent(ReleaseName);
             InitializeLocalLogo();
             LoadEditorPreferences(); // Fallback reload pass when the assembly compilation changes
         }
@@ -179,7 +182,7 @@ namespace KaleidoVR.EditorTools
         {
             EditorGUI.BeginChangeCheck(); // Watch the UI canvas frame window layout inputs for adjustments
 
-            KaleidoAssetOrganizerUI.DrawHeader(this, headerIcon, VERSION);
+            KaleidoAssetOrganizerUI.DrawHeader(this, headerIcon);
             KaleidoAssetOrganizerUI.DrawOutputDirectory(this);
             GUILayout.Space(5);
             KaleidoAssetOrganizerUI.DrawSettings(this);
@@ -3481,15 +3484,14 @@ namespace KaleidoVR.EditorTools
         private static GUIStyle dropHintStyle;
         private static bool cachedDropProSkin = true;
 
-        public static void DrawHeader(KaleidoAssetOrganizer window, Texture2D logo, string version)
+        public static void DrawHeader(KaleidoAssetOrganizer window, Texture2D logo)
         {
             GUIStyle centeredTitleStyle = new GUIStyle(EditorStyles.boldLabel) { alignment = TextAnchor.MiddleCenter, fontSize = 14 };
-            GUIStyle centeredVersionStyle = new GUIStyle(EditorStyles.miniLabel) { alignment = TextAnchor.MiddleCenter };
             GUILayout.Space(10); GUILayout.BeginHorizontal(); GUILayout.FlexibleSpace();
             if (logo != null) { Rect logoRect = GUILayoutUtility.GetRect(320, 200, GUILayout.Width(320), GUILayout.Height(200)); GUI.DrawTexture(logoRect, logo, ScaleMode.ScaleToFit); }
             else { GUILayout.Label($"...Place your logo at {KaleidoAssetOrganizer.ICON_PATH}...", EditorStyles.miniLabel); }
             GUILayout.FlexibleSpace(); GUILayout.EndHorizontal(); GUILayout.Space(2);
-            GUILayout.Label("KALEIDO VR ORGANIZER", centeredTitleStyle); GUILayout.Label($"v{version}", centeredVersionStyle);
+            GUILayout.Label(KaleidoAssetOrganizer.ReleaseName, centeredTitleStyle);
             EditorGUILayout.BeginHorizontal();
             GUILayout.FlexibleSpace();
             if (GUILayout.Button("KaleidoVR (Credits)", GUILayout.Width(160), GUILayout.Height(22)))
