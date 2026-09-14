@@ -1,5 +1,9 @@
 What's new
 
+1.2.3
+Ignore List objects are left out of the organized prefab and scene.
+Files that belong only to those objects, including their FBX, are not copied.
+
 1.2.2
 The window title and header show Asset Organizer 1.2.2.
 
