@@ -196,7 +196,7 @@ namespace KaleidoVR.EditorTools
             KaleidoAssetOrganizerUI.DrawOrganizeButton(this);
             KaleidoAssetOrganizerUI.DrawDiscordButton();
             KaleidoAssetOrganizerUI.DrawClearLogCacheButton();
-            KaleidoAssetOrganizerUI.DrawFooter(this);
+            KaleidoAssetOrganizerUI.DrawFooter();
 
             // If you change a dropdown toggle or directory text box choice field path, save it immediately
             if (EditorGUI.EndChangeCheck())
@@ -204,28 +204,25 @@ namespace KaleidoVR.EditorTools
                 SaveEditorPreferences();
             }
 
-            ResizeWindow();
+            FitWindowToContent();
         }
 
         public void ResizeWindow()
         {
-            float logoHeight = headerIcon != null ? 200f : 15f;
-            float outputDirHeight = 45f;
-            float settingsHeight = 100f;
-            float objectsHeight = 120f + (objectsToOrganize.Count * 22f);
-            float organizeOptionsHeight = (organizeOptions.Count * 22f) + 90f;
-            float ignoreListHeight = 65f + (ignoreList.Count * 22f);
-            float organizeButtonHeight = 55f;
-            float creditsButtonHeight = 26f;
-            float discordButtonHeight = 28f;
-            float clearLogCacheHeight = 24f;
-            float footerHeight = 25f;
+            Vector2 size = new Vector2(500f, 420f);
+            minSize = size;
+            maxSize = size;
+        }
 
-            float totalHeight = logoHeight + outputDirHeight + settingsHeight + objectsHeight + organizeOptionsHeight + ignoreListHeight + organizeButtonHeight + creditsButtonHeight + discordButtonHeight + clearLogCacheHeight + footerHeight;
-
-            Vector2 targetSize = new Vector2(500, totalHeight);
-            minSize = targetSize;
-            maxSize = targetSize;
+        public void FitWindowToContent()
+        {
+            if (Event.current.type != EventType.Repaint) return;
+            float bottom = GUILayoutUtility.GetLastRect().yMax + 8f;
+            float height = Mathf.Ceil(Mathf.Max(320f, bottom));
+            Vector2 size = new Vector2(500f, height);
+            if (minSize == size && maxSize == size) return;
+            minSize = size;
+            maxSize = size;
         }
     }
 
@@ -3780,14 +3777,16 @@ namespace KaleidoVR.EditorTools
         private static GUIStyle dropTitleStyle;
         private static GUIStyle dropHintStyle;
         private static bool cachedDropProSkin = true;
+        private static string logoTrimPath;
+        private static Rect logoTrimUv = new Rect(0f, 0f, 1f, 1f);
 
         public static void DrawHeader(KaleidoAssetOrganizer window, Texture2D logo)
         {
             GUIStyle centeredTitleStyle = new GUIStyle(EditorStyles.boldLabel) { alignment = TextAnchor.MiddleCenter, fontSize = 14 };
             GUILayout.Space(10); GUILayout.BeginHorizontal(); GUILayout.FlexibleSpace();
-            if (logo != null) { Rect logoRect = GUILayoutUtility.GetRect(320, 200, GUILayout.Width(320), GUILayout.Height(200)); GUI.DrawTexture(logoRect, logo, ScaleMode.ScaleToFit); }
+            if (logo != null) DrawTrimmedLogo(logo, 160f, 100f);
             else { GUILayout.Label($"...Place your logo at {KaleidoAssetOrganizer.ICON_PATH}...", EditorStyles.miniLabel); }
-            GUILayout.FlexibleSpace(); GUILayout.EndHorizontal(); GUILayout.Space(2);
+            GUILayout.FlexibleSpace(); GUILayout.EndHorizontal(); GUILayout.Space(10);
             GUILayout.Label(KaleidoAssetOrganizer.ReleaseName, centeredTitleStyle);
             EditorGUILayout.BeginHorizontal();
             GUILayout.FlexibleSpace();
@@ -3795,6 +3794,69 @@ namespace KaleidoVR.EditorTools
                 KaleidoVRCreditsWindow.Open();
             GUILayout.FlexibleSpace();
             EditorGUILayout.EndHorizontal();
+        }
+
+        private static Rect LogoTexCoords(Texture2D logo)
+        {
+            string path = AssetDatabase.GetAssetPath(logo);
+            if (path == logoTrimPath) return logoTrimUv;
+
+            logoTrimPath = path;
+            logoTrimUv = new Rect(0f, 0f, 1f, 1f);
+            if (string.IsNullOrEmpty(path) || !File.Exists(path)) return logoTrimUv;
+
+            Texture2D probe = new Texture2D(2, 2, TextureFormat.RGBA32, false) { hideFlags = HideFlags.HideAndDontSave };
+            try
+            {
+                if (probe.LoadImage(File.ReadAllBytes(path), false))
+                {
+                    Color32[] pixels = probe.GetPixels32();
+                    int width = probe.width;
+                    int height = probe.height;
+                    int minX = width, maxX = -1, minY = height, maxY = -1;
+                    for (int y = 0; y < height; y++)
+                    {
+                        int row = y * width;
+                        for (int x = 0; x < width; x++)
+                        {
+                            if (pixels[row + x].a <= 8) continue;
+                            if (x < minX) minX = x;
+                            if (x > maxX) maxX = x;
+                            if (y < minY) minY = y;
+                            if (y > maxY) maxY = y;
+                        }
+                    }
+                    if (maxX >= minX && maxY >= minY)
+                    {
+                        logoTrimUv = new Rect(
+                            minX / (float)width,
+                            minY / (float)height,
+                            (maxX - minX + 1) / (float)width,
+                            (maxY - minY + 1) / (float)height);
+                    }
+                }
+            }
+            catch (Exception)
+            {
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(probe);
+            }
+
+            return logoTrimUv;
+        }
+
+        private static void DrawTrimmedLogo(Texture2D logo, float maxWidth, float maxHeight)
+        {
+            Rect uv = LogoTexCoords(logo);
+            float sourceWidth = Mathf.Max(1f, logo.width * uv.width);
+            float sourceHeight = Mathf.Max(1f, logo.height * uv.height);
+            float scale = Mathf.Min(maxWidth / sourceWidth, maxHeight / sourceHeight);
+            float drawWidth = Mathf.Round(sourceWidth * scale);
+            float drawHeight = Mathf.Round(sourceHeight * scale);
+            Rect logoRect = GUILayoutUtility.GetRect(drawWidth, drawHeight, GUILayout.Width(drawWidth), GUILayout.Height(drawHeight));
+            GUI.DrawTextureWithTexCoords(logoRect, logo, uv);
         }
 
         public static void DrawOutputDirectory(KaleidoAssetOrganizer window)
@@ -4100,6 +4162,15 @@ namespace KaleidoVR.EditorTools
             GUILayout.FlexibleSpace();
             EditorGUILayout.EndHorizontal();
         }
-        public static void DrawFooter(KaleidoAssetOrganizer window) { GUILayout.Space(5); if (GUILayout.Button("Visit kalivr.com", EditorStyles.centeredGreyMiniLabel)) Application.OpenURL("https://kalivr.com"); }
+        public static void DrawFooter()
+        {
+            GUILayout.Space(5);
+            GUILayout.Label("Created and maintained by KaleidoVR", EditorStyles.centeredGreyMiniLabel);
+            if (GUILayout.Button("Visit kalivr.com", EditorStyles.centeredGreyMiniLabel))
+            {
+                Application.OpenURL("https://kalivr.com");
+            }
+            GUILayout.Space(8);
+        }
     }
 }
