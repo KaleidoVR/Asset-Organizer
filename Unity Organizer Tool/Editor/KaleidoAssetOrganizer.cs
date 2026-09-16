@@ -67,7 +67,9 @@ namespace KaleidoVR.EditorTools
             {"DefaultAsset", "Ignore"}
         };
 
+        public int uiTab = 0;
         public bool folderSettingsForThisOutput = false;
+        public Vector2 settingsScroll;
         public KaleidoOrganizerFolderLayout folderLayout = KaleidoOrganizerFolderLayout.CreateDefault();
 
         [MenuItem("KaleidoVR/Asset Organizer", false, 100)]
@@ -151,6 +153,7 @@ namespace KaleidoVR.EditorTools
             if (KaleidoAssetOrganizerUI.IsSamplePrefabName(prefabName)) prefabName = SAMPLE_PREFAB_NAME;
             if (EditorPrefs.HasKey("KVR_CreatePrefab")) createPrefab = EditorPrefs.GetBool("KVR_CreatePrefab");
             if (EditorPrefs.HasKey("KVR_RenameOldNew")) renameOldAndNewObjects = EditorPrefs.GetBool("KVR_RenameOldNew");
+            if (EditorPrefs.HasKey("KVR_UITab")) uiTab = EditorPrefs.GetInt("KVR_UITab");
             if (EditorPrefs.HasKey("KVR_Fold_ThisOutput")) folderSettingsForThisOutput = EditorPrefs.GetBool("KVR_Fold_ThisOutput");
             autoParsePoiyomi = true;
             autoSetupVRCDescriptor = true;
@@ -178,6 +181,7 @@ namespace KaleidoVR.EditorTools
             EditorPrefs.SetString("KVR_PrefabName", prefabName);
             EditorPrefs.SetBool("KVR_CreatePrefab", createPrefab);
             EditorPrefs.SetBool("KVR_RenameOldNew", renameOldAndNewObjects);
+            EditorPrefs.SetInt("KVR_UITab", uiTab);
             EditorPrefs.SetBool("KVR_Fold_ThisOutput", folderSettingsForThisOutput);
 
             foreach (KeyValuePair<string, string> kvp in organizeOptions)
@@ -192,19 +196,30 @@ namespace KaleidoVR.EditorTools
         private void OnGUI()
         {
             EditorGUI.BeginChangeCheck(); // Watch the UI canvas frame window layout inputs for adjustments
+            string outputBefore = outputDirectory;
 
             KaleidoAssetOrganizerUI.DrawHeader(this, headerIcon);
-            KaleidoAssetOrganizerUI.DrawOutputDirectory(this);
-            GUILayout.Space(5);
-            KaleidoAssetOrganizerUI.DrawSettings(this);
-            GUILayout.Space(5);
-            KaleidoAssetOrganizerUI.DrawObjectsToOrganize(this);
-            GUILayout.Space(5);
-            KaleidoAssetOrganizerUI.DrawOrganizeOptions(this);
-            GUILayout.Space(5);
-            KaleidoAssetOrganizerUI.DrawIgnoreList(this);
-            GUILayout.Space(5);
-            KaleidoAssetOrganizerUI.DrawOrganizeButton(this);
+            KaleidoAssetOrganizerUI.DrawTabs(this);
+            if (uiTab == 1)
+            {
+                settingsScroll = EditorGUILayout.BeginScrollView(settingsScroll, GUILayout.MaxHeight(560f));
+                KaleidoAssetOrganizerUI.DrawFolderSettingsBeta(this);
+                EditorGUILayout.EndScrollView();
+            }
+            else
+            {
+                KaleidoAssetOrganizerUI.DrawOutputDirectory(this);
+                GUILayout.Space(5);
+                KaleidoAssetOrganizerUI.DrawSettings(this);
+                GUILayout.Space(5);
+                KaleidoAssetOrganizerUI.DrawObjectsToOrganize(this);
+                GUILayout.Space(5);
+                KaleidoAssetOrganizerUI.DrawOrganizeOptions(this);
+                GUILayout.Space(5);
+                KaleidoAssetOrganizerUI.DrawIgnoreList(this);
+                GUILayout.Space(5);
+                KaleidoAssetOrganizerUI.DrawOrganizeButton(this);
+            }
             KaleidoAssetOrganizerUI.DrawDiscordButton();
             KaleidoAssetOrganizerUI.DrawClearLogCacheButton();
             KaleidoAssetOrganizerUI.DrawFooter();
@@ -212,6 +227,12 @@ namespace KaleidoVR.EditorTools
             // If you change a dropdown toggle or directory text box choice field path, save it immediately
             if (EditorGUI.EndChangeCheck())
             {
+                if (folderSettingsForThisOutput && outputBefore != outputDirectory)
+                {
+                    if (folderLayout == null) folderLayout = KaleidoOrganizerFolderLayout.CreateDefault();
+                    folderLayout.Save(outputBefore, true);
+                    folderLayout.Load(outputDirectory, true);
+                }
                 SaveEditorPreferences();
             }
 
@@ -4092,6 +4113,18 @@ namespace KaleidoVR.EditorTools
             GUI.DrawTextureWithTexCoords(logoRect, logo, uv);
         }
 
+        public static void DrawTabs(KaleidoAssetOrganizer window)
+        {
+            GUILayout.Space(4);
+            EditorGUILayout.BeginHorizontal();
+            if (GUILayout.Toggle(window.uiTab == 0, "Organize", EditorStyles.miniButton, GUILayout.Height(24), GUILayout.ExpandWidth(true)))
+                window.uiTab = 0;
+            if (GUILayout.Toggle(window.uiTab == 1, "Settings (Beta)", EditorStyles.miniButton, GUILayout.Height(24), GUILayout.ExpandWidth(true)))
+                window.uiTab = 1;
+            EditorGUILayout.EndHorizontal();
+            GUILayout.Space(6);
+        }
+
         public static void DrawOutputDirectory(KaleidoAssetOrganizer window)
         {
             GUILayout.Label("Output Directory", EditorStyles.boldLabel); EditorGUILayout.BeginHorizontal();
@@ -4404,6 +4437,94 @@ namespace KaleidoVR.EditorTools
                 Application.OpenURL("https://kalivr.com");
             }
             GUILayout.Space(8);
+        }
+
+        public static void DrawFolderSettingsBeta(KaleidoAssetOrganizer window)
+        {
+            if (window.folderLayout == null) window.folderLayout = KaleidoOrganizerFolderLayout.CreateDefault();
+            KaleidoOrganizerFolderLayout layout = window.folderLayout;
+
+            EditorGUILayout.HelpBox("Beta. Rename the output folders and choose where each asset type lands. Copy, Move, and Ignore stay on Organize.", MessageType.Info);
+
+            GUILayout.Label("Folder layout", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("Names used under the Output Directory. Child names sit under Textures or the VRChat root.", EditorStyles.miniLabel);
+
+            EditorGUILayout.BeginHorizontal();
+            GUILayout.Space(14);
+            EditorGUILayout.BeginVertical();
+            layout.models = EditorGUILayout.TextField("Models", layout.models);
+            layout.materials = EditorGUILayout.TextField("Materials", layout.materials);
+            layout.textures = EditorGUILayout.TextField("Textures", layout.textures);
+            layout.normals = EditorGUILayout.TextField("Normals", layout.normals);
+            layout.emissions = EditorGUILayout.TextField("Emissions", layout.emissions);
+            layout.metallic = EditorGUILayout.TextField("Metallic", layout.metallic);
+            layout.roughness = EditorGUILayout.TextField("Roughness", layout.roughness);
+            layout.ao = EditorGUILayout.TextField("AO", layout.ao);
+            layout.audio = EditorGUILayout.TextField("Audio", layout.audio);
+            layout.prefabs = EditorGUILayout.TextField("Prefabs", layout.prefabs);
+            layout.other = EditorGUILayout.TextField("Other", layout.other);
+            layout.vrcRoot = EditorGUILayout.TextField("VRChat root", layout.vrcRoot);
+            layout.animations = EditorGUILayout.TextField("Animations", layout.animations);
+            layout.blendTrees = EditorGUILayout.TextField("Blend Trees", layout.blendTrees);
+            layout.avatarMasks = EditorGUILayout.TextField("Avatar Masks", layout.avatarMasks);
+            layout.controllers = EditorGUILayout.TextField("Controllers", layout.controllers);
+            layout.menus = EditorGUILayout.TextField("Menus", layout.menus);
+            layout.parameters = EditorGUILayout.TextField("Parameters", layout.parameters);
+            EditorGUILayout.EndVertical();
+            GUILayout.Space(14);
+            EditorGUILayout.EndHorizontal();
+
+            GUILayout.Space(8);
+            GUILayout.Label("Where each type goes", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("Copy / Move / Ignore stay on Organize. This only picks the folder.", EditorStyles.miniLabel);
+
+            string[] slotKeys = KaleidoOrganizerFolderLayout.TypeSlotKeys;
+            string[] slotLabels = new string[slotKeys.Length];
+            for (int i = 0; i < slotKeys.Length; i++) slotLabels[i] = KaleidoOrganizerFolderLayout.SlotLabel(slotKeys[i]);
+
+            if (layout.typeSlots == null) layout.ResetTypeSlots();
+            EditorGUILayout.BeginHorizontal();
+            GUILayout.Space(14);
+            EditorGUILayout.BeginVertical();
+            foreach (string typeName in new List<string>(window.organizeOptions.Keys))
+            {
+                if (!layout.typeSlots.ContainsKey(typeName)) layout.typeSlots[typeName] = KaleidoOrganizerFolderLayout.SlotOther;
+                int current = Mathf.Max(0, Array.IndexOf(slotKeys, layout.typeSlots[typeName]));
+                EditorGUILayout.BeginHorizontal();
+                GUILayout.Label(new GUIContent(" " + FriendlyName(typeName), GetNativeUnityIcon(typeName)), GUILayout.Height(18), GUILayout.Width(220));
+                GUILayout.FlexibleSpace();
+                int picked = EditorGUILayout.Popup(current, slotLabels, GUILayout.Width(140));
+                layout.typeSlots[typeName] = slotKeys[Mathf.Clamp(picked, 0, slotKeys.Length - 1)];
+                EditorGUILayout.EndHorizontal();
+            }
+            EditorGUILayout.EndVertical();
+            GUILayout.Space(14);
+            EditorGUILayout.EndHorizontal();
+
+            GUILayout.Space(8);
+            GUILayout.Label("These settings apply to", EditorStyles.boldLabel);
+            bool thisOutput = window.folderSettingsForThisOutput;
+            if (EditorGUILayout.ToggleLeft("All organizes", !thisOutput) && thisOutput)
+            {
+                layout.Save(window.outputDirectory, true);
+                window.folderSettingsForThisOutput = false;
+                layout.Load(window.outputDirectory, false);
+                GUI.changed = true;
+            }
+            if (EditorGUILayout.ToggleLeft("This output folder only", thisOutput) && !thisOutput)
+            {
+                layout.Save(window.outputDirectory, false);
+                window.folderSettingsForThisOutput = true;
+                layout.Load(window.outputDirectory, true);
+                GUI.changed = true;
+            }
+
+            GUILayout.Space(6);
+            if (GUILayout.Button("Reset to defaults"))
+            {
+                layout.ResetToDefaults();
+                GUI.changed = true;
+            }
         }
     }
 }
