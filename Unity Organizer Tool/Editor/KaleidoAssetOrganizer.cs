@@ -67,6 +67,9 @@ namespace KaleidoVR.EditorTools
             {"DefaultAsset", "Ignore"}
         };
 
+        public bool folderSettingsForThisOutput = false;
+        public KaleidoOrganizerFolderLayout folderLayout = KaleidoOrganizerFolderLayout.CreateDefault();
+
         [MenuItem("KaleidoVR/Asset Organizer", false, 100)]
         public static void ShowWindow()
         {
@@ -148,6 +151,7 @@ namespace KaleidoVR.EditorTools
             if (KaleidoAssetOrganizerUI.IsSamplePrefabName(prefabName)) prefabName = SAMPLE_PREFAB_NAME;
             if (EditorPrefs.HasKey("KVR_CreatePrefab")) createPrefab = EditorPrefs.GetBool("KVR_CreatePrefab");
             if (EditorPrefs.HasKey("KVR_RenameOldNew")) renameOldAndNewObjects = EditorPrefs.GetBool("KVR_RenameOldNew");
+            if (EditorPrefs.HasKey("KVR_Fold_ThisOutput")) folderSettingsForThisOutput = EditorPrefs.GetBool("KVR_Fold_ThisOutput");
             autoParsePoiyomi = true;
             autoSetupVRCDescriptor = true;
 
@@ -161,6 +165,9 @@ namespace KaleidoVR.EditorTools
                     organizeOptions[key] = EditorPrefs.GetString(prefKey);
                 }
             }
+
+            if (folderLayout == null) folderLayout = KaleidoOrganizerFolderLayout.CreateDefault();
+            folderLayout.Load(outputDirectory, folderSettingsForThisOutput);
         }
 
         // Saves selection states down to preferences instantly when values change
@@ -171,11 +178,15 @@ namespace KaleidoVR.EditorTools
             EditorPrefs.SetString("KVR_PrefabName", prefabName);
             EditorPrefs.SetBool("KVR_CreatePrefab", createPrefab);
             EditorPrefs.SetBool("KVR_RenameOldNew", renameOldAndNewObjects);
+            EditorPrefs.SetBool("KVR_Fold_ThisOutput", folderSettingsForThisOutput);
 
             foreach (KeyValuePair<string, string> kvp in organizeOptions)
             {
                 EditorPrefs.SetString("KVR_Opt_" + kvp.Key, kvp.Value);
             }
+
+            if (folderLayout == null) folderLayout = KaleidoOrganizerFolderLayout.CreateDefault();
+            folderLayout.Save(outputDirectory, folderSettingsForThisOutput);
         }
 
         private void OnGUI()
@@ -223,6 +234,250 @@ namespace KaleidoVR.EditorTools
             if (minSize == size && maxSize == size) return;
             minSize = size;
             maxSize = size;
+        }
+    }
+
+    public sealed class KaleidoOrganizerFolderLayout
+    {
+        public const string SlotModels = "models";
+        public const string SlotMaterials = "materials";
+        public const string SlotTextures = "textures";
+        public const string SlotAudio = "audio";
+        public const string SlotPrefabs = "prefabs";
+        public const string SlotOther = "other";
+        public const string SlotAnimations = "animations";
+        public const string SlotBlendTrees = "blendTrees";
+        public const string SlotMasks = "masks";
+        public const string SlotControllers = "controllers";
+        public const string SlotMenus = "menus";
+        public const string SlotParameters = "parameters";
+
+        public static readonly string[] TypeSlotKeys =
+        {
+            SlotModels, SlotMaterials, SlotTextures, SlotAudio, SlotPrefabs, SlotOther,
+            SlotAnimations, SlotBlendTrees, SlotMasks, SlotControllers, SlotMenus, SlotParameters
+        };
+
+        public string models = "FBX";
+        public string materials = "Materials";
+        public string textures = "Textures";
+        public string normals = "Normals";
+        public string emissions = "Emissions";
+        public string metallic = "Metallic";
+        public string roughness = "Roughness";
+        public string ao = "AO";
+        public string audio = "Audio";
+        public string prefabs = "Prefabs";
+        public string other = "Other";
+        public string vrcRoot = "3.0";
+        public string animations = "Animations";
+        public string blendTrees = "BlendTrees";
+        public string avatarMasks = "Avatar Masks";
+        public string controllers = "Controllers";
+        public string menus = "Menus";
+        public string parameters = "VRCExpressionParameters";
+        public Dictionary<string, string> typeSlots = new Dictionary<string, string>();
+
+        public static KaleidoOrganizerFolderLayout CreateDefault()
+        {
+            KaleidoOrganizerFolderLayout layout = new KaleidoOrganizerFolderLayout();
+            layout.ResetTypeSlots();
+            return layout;
+        }
+
+        public void ResetToDefaults()
+        {
+            models = "FBX";
+            materials = "Materials";
+            textures = "Textures";
+            normals = "Normals";
+            emissions = "Emissions";
+            metallic = "Metallic";
+            roughness = "Roughness";
+            ao = "AO";
+            audio = "Audio";
+            prefabs = "Prefabs";
+            other = "Other";
+            vrcRoot = "3.0";
+            animations = "Animations";
+            blendTrees = "BlendTrees";
+            avatarMasks = "Avatar Masks";
+            controllers = "Controllers";
+            menus = "Menus";
+            parameters = "VRCExpressionParameters";
+            ResetTypeSlots();
+        }
+
+        public void ResetTypeSlots()
+        {
+            typeSlots = new Dictionary<string, string>
+            {
+                {"GameObject", SlotModels},
+                {"Texture2D", SlotTextures},
+                {"Cubemap", SlotTextures},
+                {"Material", SlotMaterials},
+                {"VRCExpressionParameters", SlotParameters},
+                {"VRCExpressionsMenu", SlotMenus},
+                {"BlendTree", SlotBlendTrees},
+                {"AnimationClip", SlotAnimations},
+                {"AnimatorOverrideController", SlotControllers},
+                {"AnimatorController", SlotControllers},
+                {"RuntimeAnimatorController", SlotControllers},
+                {"AvatarMask", SlotMasks},
+                {"AudioClip", SlotAudio},
+                {"Shader", SlotOther},
+                {"MonoScript", SlotOther},
+                {"DefaultAsset", SlotOther}
+            };
+        }
+
+        public static string SlotLabel(string slot)
+        {
+            return slot switch
+            {
+                SlotModels => "Models",
+                SlotMaterials => "Materials",
+                SlotTextures => "Textures",
+                SlotAudio => "Audio",
+                SlotPrefabs => "Prefabs",
+                SlotOther => "Other",
+                SlotAnimations => "Animations",
+                SlotBlendTrees => "Blend Trees",
+                SlotMasks => "Avatar Masks",
+                SlotControllers => "Controllers",
+                SlotMenus => "Menus",
+                SlotParameters => "Parameters",
+                _ => "Other"
+            };
+        }
+
+        public string PathForSlot(string slot)
+        {
+            return slot switch
+            {
+                SlotModels => Sanitize(models, "FBX"),
+                SlotMaterials => Sanitize(materials, "Materials"),
+                SlotTextures => Sanitize(textures, "Textures"),
+                SlotAudio => Sanitize(audio, "Audio"),
+                SlotPrefabs => Sanitize(prefabs, "Prefabs"),
+                SlotOther => Sanitize(other, "Other"),
+                SlotAnimations => Combine(Sanitize(vrcRoot, "3.0"), Sanitize(animations, "Animations")),
+                SlotBlendTrees => Combine(Sanitize(vrcRoot, "3.0"), Sanitize(blendTrees, "BlendTrees")),
+                SlotMasks => Combine(Sanitize(vrcRoot, "3.0"), Sanitize(avatarMasks, "Avatar Masks")),
+                SlotControllers => Combine(Sanitize(vrcRoot, "3.0"), Sanitize(controllers, "Controllers")),
+                SlotMenus => Combine(Sanitize(vrcRoot, "3.0"), Sanitize(menus, "Menus")),
+                SlotParameters => Combine(Sanitize(vrcRoot, "3.0"), Sanitize(parameters, "VRCExpressionParameters")),
+                _ => Sanitize(other, "Other")
+            };
+        }
+
+        public string Resolve(string typeName, string assetPath, bool parsePoiyomi)
+        {
+            if (!string.IsNullOrEmpty(assetPath) && assetPath.EndsWith(".prefab", StringComparison.OrdinalIgnoreCase))
+                return PathForSlot(SlotPrefabs);
+
+            if (parsePoiyomi && typeName == "Texture2D" && !string.IsNullOrEmpty(assetPath))
+            {
+                string lowerName = Path.GetFileNameWithoutExtension(assetPath).ToLowerInvariant();
+                string texRoot = PathForSlot(SlotTextures);
+                if (lowerName.Contains("normal") || lowerName.EndsWith("_n") || lowerName.Contains("nrm"))
+                    return Combine(texRoot, Sanitize(normals, "Normals"));
+                if (lowerName.Contains("emission") || lowerName.Contains("emissive") || lowerName.EndsWith("_e"))
+                    return Combine(texRoot, Sanitize(emissions, "Emissions"));
+                if (lowerName.Contains("metallic") || lowerName.Contains("metal") || lowerName.EndsWith("_m"))
+                    return Combine(texRoot, Sanitize(metallic, "Metallic"));
+                if (lowerName.Contains("roughness") || lowerName.Contains("rough") || lowerName.EndsWith("_r"))
+                    return Combine(texRoot, Sanitize(roughness, "Roughness"));
+                if (lowerName.Contains("ao") || lowerName.Contains("occlusion"))
+                    return Combine(texRoot, Sanitize(ao, "AO"));
+            }
+
+            string slot = SlotOther;
+            if (typeSlots != null && !string.IsNullOrEmpty(typeName) && typeSlots.ContainsKey(typeName))
+                slot = typeSlots[typeName];
+            return PathForSlot(slot);
+        }
+
+        public void Load(string outputDirectory, bool forThisOutput)
+        {
+            string prefix = PrefPrefix(outputDirectory, forThisOutput);
+            models = EditorPrefs.GetString(prefix + "models", "FBX");
+            materials = EditorPrefs.GetString(prefix + "materials", "Materials");
+            textures = EditorPrefs.GetString(prefix + "textures", "Textures");
+            normals = EditorPrefs.GetString(prefix + "normals", "Normals");
+            emissions = EditorPrefs.GetString(prefix + "emissions", "Emissions");
+            metallic = EditorPrefs.GetString(prefix + "metallic", "Metallic");
+            roughness = EditorPrefs.GetString(prefix + "roughness", "Roughness");
+            ao = EditorPrefs.GetString(prefix + "ao", "AO");
+            audio = EditorPrefs.GetString(prefix + "audio", "Audio");
+            prefabs = EditorPrefs.GetString(prefix + "prefabs", "Prefabs");
+            other = EditorPrefs.GetString(prefix + "other", "Other");
+            vrcRoot = EditorPrefs.GetString(prefix + "vrcRoot", "3.0");
+            animations = EditorPrefs.GetString(prefix + "animations", "Animations");
+            blendTrees = EditorPrefs.GetString(prefix + "blendTrees", "BlendTrees");
+            avatarMasks = EditorPrefs.GetString(prefix + "avatarMasks", "Avatar Masks");
+            controllers = EditorPrefs.GetString(prefix + "controllers", "Controllers");
+            menus = EditorPrefs.GetString(prefix + "menus", "Menus");
+            parameters = EditorPrefs.GetString(prefix + "parameters", "VRCExpressionParameters");
+            ResetTypeSlots();
+            List<string> keys = new List<string>(typeSlots.Keys);
+            for (int i = 0; i < keys.Count; i++)
+            {
+                string key = keys[i];
+                typeSlots[key] = EditorPrefs.GetString(prefix + "slot_" + key, typeSlots[key]);
+            }
+        }
+
+        public void Save(string outputDirectory, bool forThisOutput)
+        {
+            string prefix = PrefPrefix(outputDirectory, forThisOutput);
+            EditorPrefs.SetString(prefix + "models", models);
+            EditorPrefs.SetString(prefix + "materials", materials);
+            EditorPrefs.SetString(prefix + "textures", textures);
+            EditorPrefs.SetString(prefix + "normals", normals);
+            EditorPrefs.SetString(prefix + "emissions", emissions);
+            EditorPrefs.SetString(prefix + "metallic", metallic);
+            EditorPrefs.SetString(prefix + "roughness", roughness);
+            EditorPrefs.SetString(prefix + "ao", ao);
+            EditorPrefs.SetString(prefix + "audio", audio);
+            EditorPrefs.SetString(prefix + "prefabs", prefabs);
+            EditorPrefs.SetString(prefix + "other", other);
+            EditorPrefs.SetString(prefix + "vrcRoot", vrcRoot);
+            EditorPrefs.SetString(prefix + "animations", animations);
+            EditorPrefs.SetString(prefix + "blendTrees", blendTrees);
+            EditorPrefs.SetString(prefix + "avatarMasks", avatarMasks);
+            EditorPrefs.SetString(prefix + "controllers", controllers);
+            EditorPrefs.SetString(prefix + "menus", menus);
+            EditorPrefs.SetString(prefix + "parameters", parameters);
+            if (typeSlots == null) return;
+            foreach (KeyValuePair<string, string> kvp in typeSlots)
+            {
+                EditorPrefs.SetString(prefix + "slot_" + kvp.Key, kvp.Value);
+            }
+        }
+
+        static string PrefPrefix(string outputDirectory, bool forThisOutput)
+        {
+            if (!forThisOutput) return "KVR_Fold_";
+            string path = KaleidoAssetOrganizerHelpers.NormalizeAssetPath(outputDirectory);
+            int hash = 23;
+            for (int i = 0; i < path.Length; i++) hash = hash * 31 + path[i];
+            return "KVR_Fold_" + Math.Abs(hash).ToString("X8") + "_";
+        }
+
+        static string Sanitize(string value, string fallback)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return fallback;
+            string name = value.Replace("\\", "/").Trim().Trim('/');
+            if (string.IsNullOrEmpty(name) || name.Contains("..") || name.IndexOf(':') >= 0) return fallback;
+            return name;
+        }
+
+        static string Combine(string root, string child)
+        {
+            if (string.IsNullOrEmpty(root)) return child;
+            if (string.IsNullOrEmpty(child)) return root;
+            return root + "/" + child;
         }
     }
 
@@ -494,40 +749,12 @@ namespace KaleidoVR.EditorTools
             return InferTransferAction(options);
         }
 
+        public static KaleidoOrganizerFolderLayout ActiveFolderLayout;
+
         public static string GetTargetFolder(string typeName, string assetPath = "", bool parsePoiyomi = false)
         {
-            if (!string.IsNullOrEmpty(assetPath) && assetPath.EndsWith(".prefab", StringComparison.OrdinalIgnoreCase))
-            {
-                return "Prefabs";
-            }
-
-            if (parsePoiyomi && typeName == "Texture2D" && !string.IsNullOrEmpty(assetPath))
-            {
-                string lowerName = Path.GetFileNameWithoutExtension(assetPath).ToLowerInvariant();
-                if (lowerName.Contains("normal") || lowerName.EndsWith("_n") || lowerName.Contains("nrm")) return "Textures/Normals";
-                if (lowerName.Contains("emission") || lowerName.Contains("emissive") || lowerName.EndsWith("_e")) return "Textures/Emissions";
-                if (lowerName.Contains("metallic") || lowerName.Contains("metal") || lowerName.EndsWith("_m")) return "Textures/Metallic";
-                if (lowerName.Contains("roughness") || lowerName.Contains("rough") || lowerName.EndsWith("_r")) return "Textures/Roughness";
-                if (lowerName.Contains("ao") || lowerName.Contains("occlusion")) return "Textures/AO";
-            }
-
-            return typeName switch
-            {
-                "GameObject" => "FBX",
-                "Material" => "Materials",
-                "Texture2D" => "Textures",
-                "Cubemap" => "Textures",
-                "AudioClip" => "Audio",
-                "AnimationClip" => "3.0/Animations",
-                "BlendTree" => "3.0/BlendTrees",
-                "AvatarMask" => "3.0/Avatar Masks",
-                "AnimatorController" => "3.0/Controllers",
-                "RuntimeAnimatorController" => "3.0/Controllers",
-                "AnimatorOverrideController" => "3.0/Controllers",
-                "VRCExpressionParameters" => "3.0/VRCExpressionParameters",
-                "VRCExpressionsMenu" => "3.0/Menus",
-                _ => "Other"
-            };
+            KaleidoOrganizerFolderLayout layout = ActiveFolderLayout ?? KaleidoOrganizerFolderLayout.CreateDefault();
+            return layout.Resolve(typeName, assetPath, parsePoiyomi);
         }
     }
 
@@ -550,6 +777,10 @@ namespace KaleidoVR.EditorTools
 
             try
             {
+                KaleidoAssetOrganizerHelpers.ActiveFolderLayout = window != null && window.folderLayout != null
+                    ? window.folderLayout
+                    : KaleidoOrganizerFolderLayout.CreateDefault();
+
                 if (EditorApplication.isPlayingOrWillChangePlaymode)
                 {
                     EditorUtility.DisplayDialog("KaleidoVR Asset Organizer", "Exit Play Mode before organizing assets.", "OK");
@@ -789,7 +1020,8 @@ namespace KaleidoVR.EditorTools
 
                         if (window.createPrefab)
                         {
-                            string prefabFolder = $"{window.outputDirectory}/Prefabs".Replace("\\", "/");
+                            string prefabFolderName = KaleidoAssetOrganizerHelpers.GetTargetFolder("PrefabRoot", ".prefab", false);
+                            string prefabFolder = $"{window.outputDirectory}/{prefabFolderName}".Replace("\\", "/");
                             string prefabPath = $"{prefabFolder}/{prefabFileName}.prefab";
                             if (!EnsureSingleAssetDirectory(prefabFolder))
                             {
@@ -870,6 +1102,7 @@ namespace KaleidoVR.EditorTools
             }
             finally
             {
+                KaleidoAssetOrganizerHelpers.ActiveFolderLayout = null;
                 if (poiyomiUnlockedToRelock.Count > 0)
                 {
                     RelockPoiyomiMaterials(poiyomiUnlockedToRelock, logEntries);
