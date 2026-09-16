@@ -4382,6 +4382,38 @@ namespace KaleidoVR.EditorTools
             return typeName == "Shader" || typeName == "MonoScript" || typeName == "DefaultAsset";
         }
 
+        private static string FolderPreview(string parent, string child)
+        {
+            parent = (parent ?? string.Empty).Replace("\\", "/").Trim().Trim('/');
+            child = (child ?? string.Empty).Replace("\\", "/").Trim().Trim('/');
+            if (string.IsNullOrEmpty(parent)) return child;
+            if (string.IsNullOrEmpty(child)) return parent;
+            return parent + "/" + child;
+        }
+
+        private static string DrawParentFolderField(string label, string value)
+        {
+            EditorGUILayout.BeginHorizontal();
+            GUILayout.Label(label, EditorStyles.boldLabel, GUILayout.Width(118));
+            value = EditorGUILayout.TextField(value);
+            EditorGUILayout.EndHorizontal();
+            return value;
+        }
+
+        private static string DrawChildFolderField(string label, string value, string parentPath)
+        {
+            EditorGUILayout.BeginHorizontal();
+            GUILayout.Space(14);
+            GUILayout.Label("└  " + label, GUILayout.Width(104));
+            value = EditorGUILayout.TextField(value);
+            EditorGUILayout.EndHorizontal();
+            EditorGUILayout.BeginHorizontal();
+            GUILayout.Space(32);
+            EditorGUILayout.LabelField(FolderPreview(parentPath, value), EditorStyles.miniLabel);
+            EditorGUILayout.EndHorizontal();
+            return value;
+        }
+
         private static string FriendlyName(string typeName)
         {
             return typeName switch { "GameObject" => "GameObject (FBX)", "Texture2D" => "Texture2D Maps", "VRCExpressionParameters" => "VRCExpressionParameters", "VRCExpressionsMenu" => "VRCExpressionsMenu", "MonoScript" => "MonoScript (C#)", "DefaultAsset" => "DefaultAsset (DLLs)", _ => typeName };
@@ -4447,29 +4479,32 @@ namespace KaleidoVR.EditorTools
             EditorGUILayout.HelpBox("Beta. Rename the output folders and choose where each asset type lands. Copy, Move, and Ignore stay on Organize.", MessageType.Info);
 
             GUILayout.Label("Folder layout", EditorStyles.boldLabel);
-            EditorGUILayout.LabelField("Names used under the Output Directory. Child names sit under Textures or the VRChat root.", EditorStyles.miniLabel);
+            EditorGUILayout.LabelField("Parents are the folders under Output. Child rows show the full path they land in.", EditorStyles.miniLabel);
 
             EditorGUILayout.BeginHorizontal();
             GUILayout.Space(14);
             EditorGUILayout.BeginVertical();
-            layout.models = EditorGUILayout.TextField("Models", layout.models);
-            layout.materials = EditorGUILayout.TextField("Materials", layout.materials);
-            layout.textures = EditorGUILayout.TextField("Textures", layout.textures);
-            layout.normals = EditorGUILayout.TextField("Normals", layout.normals);
-            layout.emissions = EditorGUILayout.TextField("Emissions", layout.emissions);
-            layout.metallic = EditorGUILayout.TextField("Metallic", layout.metallic);
-            layout.roughness = EditorGUILayout.TextField("Roughness", layout.roughness);
-            layout.ao = EditorGUILayout.TextField("AO", layout.ao);
-            layout.audio = EditorGUILayout.TextField("Audio", layout.audio);
-            layout.prefabs = EditorGUILayout.TextField("Prefabs", layout.prefabs);
-            layout.other = EditorGUILayout.TextField("Other", layout.other);
-            layout.vrcRoot = EditorGUILayout.TextField("VRChat root", layout.vrcRoot);
-            layout.animations = EditorGUILayout.TextField("Animations", layout.animations);
-            layout.blendTrees = EditorGUILayout.TextField("Blend Trees", layout.blendTrees);
-            layout.avatarMasks = EditorGUILayout.TextField("Avatar Masks", layout.avatarMasks);
-            layout.controllers = EditorGUILayout.TextField("Controllers", layout.controllers);
-            layout.menus = EditorGUILayout.TextField("Menus", layout.menus);
-            layout.parameters = EditorGUILayout.TextField("Parameters", layout.parameters);
+            layout.models = DrawParentFolderField("Models", layout.models);
+            layout.materials = DrawParentFolderField("Materials", layout.materials);
+            GUILayout.Space(6);
+            layout.textures = DrawParentFolderField("Textures", layout.textures);
+            layout.normals = DrawChildFolderField("Normals", layout.normals, layout.textures);
+            layout.emissions = DrawChildFolderField("Emissions", layout.emissions, layout.textures);
+            layout.metallic = DrawChildFolderField("Metallic", layout.metallic, layout.textures);
+            layout.roughness = DrawChildFolderField("Roughness", layout.roughness, layout.textures);
+            layout.ao = DrawChildFolderField("AO", layout.ao, layout.textures);
+            GUILayout.Space(6);
+            layout.audio = DrawParentFolderField("Audio", layout.audio);
+            layout.prefabs = DrawParentFolderField("Prefabs", layout.prefabs);
+            layout.other = DrawParentFolderField("Other", layout.other);
+            GUILayout.Space(6);
+            layout.vrcRoot = DrawParentFolderField("VRChat root", layout.vrcRoot);
+            layout.animations = DrawChildFolderField("Animations", layout.animations, layout.vrcRoot);
+            layout.blendTrees = DrawChildFolderField("Blend Trees", layout.blendTrees, layout.vrcRoot);
+            layout.avatarMasks = DrawChildFolderField("Avatar Masks", layout.avatarMasks, layout.vrcRoot);
+            layout.controllers = DrawChildFolderField("Controllers", layout.controllers, layout.vrcRoot);
+            layout.menus = DrawChildFolderField("Menus", layout.menus, layout.vrcRoot);
+            layout.parameters = DrawChildFolderField("Parameters", layout.parameters, layout.vrcRoot);
             EditorGUILayout.EndVertical();
             GUILayout.Space(14);
             EditorGUILayout.EndHorizontal();
