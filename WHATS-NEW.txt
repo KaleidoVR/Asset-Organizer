@@ -1,5 +1,10 @@
 What's new
 
+1.2.5
+The new Hierarchy object and prefab use Prefab Name.
+Create Prefab writes only that new prefab into Prefabs, not a copy of the previous model.
+Ignored objects keep their own materials and textures out of the output.
+
 1.2.4
 Settings (Beta) lets you rename output folders and pick where each type goes.
 Those settings can apply to all organizes or only the current output folder.
