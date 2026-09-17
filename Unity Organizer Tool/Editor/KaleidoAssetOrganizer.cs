@@ -22,7 +22,7 @@ namespace KaleidoVR.EditorTools
     public class KaleidoAssetOrganizer : EditorWindow
     {
         // Each digit rolls 0-9. After 1.0.9 comes 1.1.0; after 1.9.9 comes 2.0.0.
-        public static readonly string VERSION = "1.2.8";
+        public static readonly string VERSION = "1.2.9";
         public static string ReleaseName { get { return "Asset Organizer " + VERSION; } }
         public const string LOGO_FILE_NAME = "Kali_Logo.png";
         public const string FALLBACK_ICON_PATH = "Assets/KaleidoVR/Editor/Icons/Kali_Logo.png";
@@ -89,9 +89,8 @@ namespace KaleidoVR.EditorTools
             if (created)
             {
                 float height = window.OrganizeDefaultHeight();
-                window.minSize = new Vector2(500f, height);
-                window.maxSize = new Vector2(500f, 4000f);
                 window.position = window.MakeCenteredRect(500f, height);
+                window.ApplyTabWindowLimits(true);
             }
             FreezeNativeDisplay(true);
             window.Show();
@@ -115,9 +114,7 @@ namespace KaleidoVR.EditorTools
             titleContent = new GUIContent(ReleaseName);
             InitializeLocalLogo();
             LoadEditorPreferences(); // Fallback reload pass when the assembly compilation changes
-            float height = OrganizeDefaultHeight();
-            minSize = new Vector2(500f, height);
-            maxSize = new Vector2(500f, 4000f);
+            ApplyTabWindowLimits(false);
         }
 
         void CreateGUI()
@@ -355,7 +352,7 @@ namespace KaleidoVR.EditorTools
 
         public void ResizeWindow()
         {
-            ApplyOrganizeDefaultSize();
+            ApplyTabWindowLimits(true);
         }
 
         float OrganizeDefaultHeight()
@@ -365,11 +362,29 @@ namespace KaleidoVR.EditorTools
 
         public void ApplyOrganizeDefaultSize()
         {
+            ApplyTabWindowLimits(true);
+        }
+
+        void ApplyTabWindowLimits(bool snapHeight)
+        {
             float height = OrganizeDefaultHeight();
-            minSize = new Vector2(500f, height);
-            maxSize = new Vector2(500f, 4000f);
-            if (Mathf.Abs(position.width - 500f) <= 0.5f && Mathf.Abs(position.height - height) <= 0.5f)
+            Vector2 min = new Vector2(500f, height);
+            Vector2 max = uiTab == 0 ? new Vector2(500f, height) : new Vector2(500f, 4000f);
+            if (minSize != min) minSize = min;
+            if (maxSize != max) maxSize = max;
+            if (!snapHeight) return;
+            if (uiTab == 0)
+            {
+                if (Mathf.Abs(position.height - height) > 0.5f)
+                    SetWindowHeight(height);
                 return;
+            }
+            if (position.height + 0.5f < height)
+                SetWindowHeight(height);
+        }
+
+        void SetWindowHeight(float height)
+        {
             Rect next = position;
             next.width = 500f;
             next.height = height;
@@ -398,13 +413,11 @@ namespace KaleidoVR.EditorTools
                     organizeFitHeight = measured;
                     EditorPrefs.SetFloat("KVR_OrganizeFitHeight", organizeFitHeight);
                 }
+                ApplyTabWindowLimits(true);
+                return;
             }
 
-            float height = OrganizeDefaultHeight();
-            if (Mathf.Abs(minSize.y - height) > 0.5f)
-                minSize = new Vector2(500f, height);
-            if (Mathf.Abs(maxSize.y - 4000f) > 0.5f || Mathf.Abs(maxSize.x - 500f) > 0.5f)
-                maxSize = new Vector2(500f, 4000f);
+            ApplyTabWindowLimits(false);
         }
     }
 

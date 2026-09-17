@@ -1,5 +1,8 @@
 What's new
 
+1.2.9
+Organize is locked to its content height. Settings (Beta) can still be stretched taller.
+
 1.2.8
 The native window uses the editor skin color so the first frame is not white.
 
@@ -14,8 +17,3 @@ Opening on Settings uses the Organize tab size so the window does not flash and 
 1.2.5
 Settings folders show as parents and children, with the full path under each child.
 Settings shows the orange special-use warning above Shader, MonoScript, and DefaultAsset.
-
-1.2.4
-Settings (Beta) lets you rename output folders and pick where each type goes.
-The header logo is smaller, and the footer says Created and maintained by KaleidoVR.
-The window sizes to its content instead of leaving a gap at the bottom.
