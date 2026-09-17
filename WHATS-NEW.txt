@@ -1,8 +1,22 @@
 What's new
 
-1.2.2
-The window title and header show Asset Organizer 1.2.2.
+1.2.7
+The window opens at the Organize size without the white flash.
 
-1.2.1
-Clear Log Cache deletes Organizer logs after a confirm prompt.
-Scripts and README say all rights reserved.
+1.2.6
+The window can grow taller. The default height still fits the Organize tab.
+Settings stays inside that height instead of expanding the window.
+Opening on Settings uses the Organize tab size so the window does not flash and grow.
+
+1.2.5
+Settings folders show as parents and children, with the full path under each child.
+Settings shows the orange special-use warning above Shader, MonoScript, and DefaultAsset.
+
+1.2.4
+Settings (Beta) lets you rename output folders and pick where each type goes.
+The header logo is smaller, and the footer says Created and maintained by KaleidoVR.
+The window sizes to its content instead of leaving a gap at the bottom.
+
+1.2.3
+Ignore List objects are left out of the organized prefab and scene.
+Files that belong only to those objects, including their FBX, are not copied.

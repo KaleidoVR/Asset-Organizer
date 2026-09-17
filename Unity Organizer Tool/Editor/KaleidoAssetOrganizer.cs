@@ -21,7 +21,7 @@ namespace KaleidoVR.EditorTools
     public class KaleidoAssetOrganizer : EditorWindow
     {
         // Each digit rolls 0-9. After 1.0.9 comes 1.1.0; after 1.9.9 comes 2.0.0.
-        public static readonly string VERSION = "1.2.2";
+        public static readonly string VERSION = "1.2.7";
         public static string ReleaseName { get { return "Asset Organizer " + VERSION; } }
         public const string LOGO_FILE_NAME = "Kali_Logo.png";
         public const string FALLBACK_ICON_PATH = "Assets/KaleidoVR/Editor/Icons/Kali_Logo.png";
@@ -71,16 +71,37 @@ namespace KaleidoVR.EditorTools
         public bool folderSettingsForThisOutput = false;
         public Vector2 settingsScroll;
         public float organizeFitHeight;
+        float settingsTabsBottom = 180f;
         public KaleidoOrganizerFolderLayout folderLayout = KaleidoOrganizerFolderLayout.CreateDefault();
 
         [MenuItem("KaleidoVR/Asset Organizer", false, 100)]
         public static void ShowWindow()
         {
-            var window = GetWindow<KaleidoAssetOrganizer>(ReleaseName);
+            KaleidoAssetOrganizer window = FindExistingWindow();
+            bool created = window == null;
+            if (created)
+                window = CreateInstance<KaleidoAssetOrganizer>();
+
             window.titleContent = new GUIContent(ReleaseName);
             window.InitializeLocalLogo();
-            window.LoadEditorPreferences(); // Load saved properties on window instantiation
-            window.ApplyOrganizeDefaultSize();
+            window.LoadEditorPreferences();
+            if (created)
+            {
+                window.ApplyOrganizeDefaultSize();
+                window.CenterOverMainWindow();
+            }
+            window.Show();
+            window.Focus();
+        }
+
+        static KaleidoAssetOrganizer FindExistingWindow()
+        {
+            KaleidoAssetOrganizer[] windows = Resources.FindObjectsOfTypeAll<KaleidoAssetOrganizer>();
+            for (int i = 0; i < windows.Length; i++)
+            {
+                if (windows[i] != null) return windows[i];
+            }
+            return null;
         }
 
         private void OnEnable()
@@ -88,13 +109,16 @@ namespace KaleidoVR.EditorTools
             titleContent = new GUIContent(ReleaseName);
             InitializeLocalLogo();
             LoadEditorPreferences(); // Fallback reload pass when the assembly compilation changes
-            ApplyOrganizeDefaultSize();
+            float height = OrganizeDefaultHeight();
+            minSize = new Vector2(500f, height);
+            maxSize = new Vector2(500f, 4000f);
         }
 
         private void InitializeLocalLogo()
         {
             cachedIconPath = null;
             headerIcon = AssetDatabase.LoadAssetAtPath<Texture2D>(ICON_PATH);
+            KaleidoAssetOrganizerUI.WarmLogoTrim(headerIcon);
         }
 
         // Locates this script in the project so Icons/ is found relative to it instead of a fixed folder name
@@ -202,6 +226,14 @@ namespace KaleidoVR.EditorTools
 
         private void OnGUI()
         {
+            if (Event.current.type == EventType.Repaint)
+            {
+                Color bg = EditorGUIUtility.isProSkin
+                    ? new Color(0.22f, 0.22f, 0.22f, 1f)
+                    : new Color(0.76f, 0.76f, 0.76f, 1f);
+                EditorGUI.DrawRect(new Rect(0f, 0f, position.width, position.height), bg);
+            }
+
             EditorGUI.BeginChangeCheck(); // Watch the UI canvas frame window layout inputs for adjustments
             string outputBefore = outputDirectory;
 
@@ -210,7 +242,9 @@ namespace KaleidoVR.EditorTools
             if (uiTab == 1)
             {
                 const float FooterBlock = 96f;
-                float used = GUILayoutUtility.GetLastRect().yMax;
+                if (Event.current.type == EventType.Repaint)
+                    settingsTabsBottom = GUILayoutUtility.GetLastRect().yMax;
+                float used = settingsTabsBottom > 1f ? settingsTabsBottom : 180f;
                 float scrollH = Mathf.Max(120f, position.height - used - FooterBlock);
                 settingsScroll = EditorGUILayout.BeginScrollView(settingsScroll, GUILayout.Height(scrollH));
                 KaleidoAssetOrganizerUI.DrawFolderSettingsBeta(this);
@@ -254,13 +288,31 @@ namespace KaleidoVR.EditorTools
             ApplyOrganizeDefaultSize();
         }
 
+        float OrganizeDefaultHeight()
+        {
+            return organizeFitHeight > 320f ? organizeFitHeight : 780f;
+        }
+
         public void ApplyOrganizeDefaultSize()
         {
-            float height = organizeFitHeight > 320f ? organizeFitHeight : 780f;
+            float height = OrganizeDefaultHeight();
             minSize = new Vector2(500f, height);
-            maxSize = new Vector2(500f, height);
-            SetWindowHeight(height);
             maxSize = new Vector2(500f, 4000f);
+            if (Mathf.Abs(position.width - 500f) <= 0.5f && Mathf.Abs(position.height - height) <= 0.5f)
+                return;
+            Rect next = position;
+            next.width = 500f;
+            next.height = height;
+            position = next;
+        }
+
+        void CenterOverMainWindow()
+        {
+            Rect main = EditorGUIUtility.GetMainWindowPosition();
+            Rect next = position;
+            next.x = main.x + Mathf.Round(Mathf.Max(0f, (main.width - next.width) * 0.5f));
+            next.y = main.y + Mathf.Round(Mathf.Max(0f, (main.height - next.height) * 0.3f));
+            position = next;
         }
 
         public void FitWindowToContent()
@@ -275,23 +327,13 @@ namespace KaleidoVR.EditorTools
                     organizeFitHeight = measured;
                     EditorPrefs.SetFloat("KVR_OrganizeFitHeight", organizeFitHeight);
                 }
-                minSize = new Vector2(500f, organizeFitHeight);
-                maxSize = new Vector2(500f, 4000f);
-                if (position.height + 0.5f < organizeFitHeight)
-                    SetWindowHeight(organizeFitHeight);
-                return;
             }
 
-            float height = organizeFitHeight > 320f ? organizeFitHeight : 780f;
-            minSize = new Vector2(500f, height);
-            maxSize = new Vector2(500f, 4000f);
-        }
-
-        void SetWindowHeight(float height)
-        {
-            Rect next = position;
-            next.height = height;
-            position = next;
+            float height = OrganizeDefaultHeight();
+            if (Mathf.Abs(minSize.y - height) > 0.5f)
+                minSize = new Vector2(500f, height);
+            if (Mathf.Abs(maxSize.y - 4000f) > 0.5f || Mathf.Abs(maxSize.x - 500f) > 0.5f)
+                maxSize = new Vector2(500f, 4000f);
         }
     }
 
@@ -4070,6 +4112,11 @@ namespace KaleidoVR.EditorTools
         private static bool cachedDropProSkin = true;
         private static string logoTrimPath;
         private static Rect logoTrimUv = new Rect(0f, 0f, 1f, 1f);
+
+        public static void WarmLogoTrim(Texture2D logo)
+        {
+            if (logo != null) LogoTexCoords(logo);
+        }
 
         public static void DrawHeader(KaleidoAssetOrganizer window, Texture2D logo)
         {
