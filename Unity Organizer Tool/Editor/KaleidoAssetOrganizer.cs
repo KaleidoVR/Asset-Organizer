@@ -80,7 +80,7 @@ namespace KaleidoVR.EditorTools
             window.titleContent = new GUIContent(ReleaseName);
             window.InitializeLocalLogo();
             window.LoadEditorPreferences(); // Load saved properties on window instantiation
-            window.ResizeWindow();
+            window.ApplyOrganizeDefaultSize();
         }
 
         private void OnEnable()
@@ -88,6 +88,7 @@ namespace KaleidoVR.EditorTools
             titleContent = new GUIContent(ReleaseName);
             InitializeLocalLogo();
             LoadEditorPreferences(); // Fallback reload pass when the assembly compilation changes
+            ApplyOrganizeDefaultSize();
         }
 
         private void InitializeLocalLogo()
@@ -170,6 +171,9 @@ namespace KaleidoVR.EditorTools
                 }
             }
 
+            if (EditorPrefs.HasKey("KVR_OrganizeFitHeight"))
+                organizeFitHeight = EditorPrefs.GetFloat("KVR_OrganizeFitHeight");
+
             if (folderLayout == null) folderLayout = KaleidoOrganizerFolderLayout.CreateDefault();
             folderLayout.Load(outputDirectory, folderSettingsForThisOutput);
         }
@@ -184,6 +188,8 @@ namespace KaleidoVR.EditorTools
             EditorPrefs.SetBool("KVR_RenameOldNew", renameOldAndNewObjects);
             EditorPrefs.SetInt("KVR_UITab", uiTab);
             EditorPrefs.SetBool("KVR_Fold_ThisOutput", folderSettingsForThisOutput);
+            if (organizeFitHeight > 0f)
+                EditorPrefs.SetFloat("KVR_OrganizeFitHeight", organizeFitHeight);
 
             foreach (KeyValuePair<string, string> kvp in organizeOptions)
             {
@@ -245,7 +251,15 @@ namespace KaleidoVR.EditorTools
 
         public void ResizeWindow()
         {
-            minSize = new Vector2(500f, 320f);
+            ApplyOrganizeDefaultSize();
+        }
+
+        public void ApplyOrganizeDefaultSize()
+        {
+            float height = organizeFitHeight > 320f ? organizeFitHeight : 780f;
+            minSize = new Vector2(500f, height);
+            maxSize = new Vector2(500f, height);
+            SetWindowHeight(height);
             maxSize = new Vector2(500f, 4000f);
         }
 
@@ -253,20 +267,24 @@ namespace KaleidoVR.EditorTools
         {
             if (Event.current.type != EventType.Repaint) return;
 
-            minSize = new Vector2(500f, 320f);
-            maxSize = new Vector2(500f, 4000f);
-
             if (uiTab == 0)
             {
-                organizeFitHeight = Mathf.Ceil(Mathf.Max(320f, GUILayoutUtility.GetLastRect().yMax + 8f));
+                float measured = Mathf.Ceil(Mathf.Max(320f, GUILayoutUtility.GetLastRect().yMax + 8f));
+                if (Mathf.Abs(organizeFitHeight - measured) > 0.5f)
+                {
+                    organizeFitHeight = measured;
+                    EditorPrefs.SetFloat("KVR_OrganizeFitHeight", organizeFitHeight);
+                }
                 minSize = new Vector2(500f, organizeFitHeight);
+                maxSize = new Vector2(500f, 4000f);
                 if (position.height + 0.5f < organizeFitHeight)
                     SetWindowHeight(organizeFitHeight);
                 return;
             }
 
-            if (organizeFitHeight <= 0f) return;
-            minSize = new Vector2(500f, organizeFitHeight);
+            float height = organizeFitHeight > 320f ? organizeFitHeight : 780f;
+            minSize = new Vector2(500f, height);
+            maxSize = new Vector2(500f, 4000f);
         }
 
         void SetWindowHeight(float height)
