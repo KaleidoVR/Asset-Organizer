@@ -707,7 +707,10 @@ namespace KaleidoVR.EditorTools
             foreach (var root in rawIgnoreList)
             {
                 if (root == null) continue;
-                if (root is GameObject || root is Component)
+                // Scene instances are stripped from the organized hierarchy and pruned
+                // against remaining renderers. CollectDependencies on those instances
+                // would pull the whole avatar prefab and skip too much.
+                if ((root is GameObject || root is Component) && !EditorUtility.IsPersistent(root))
                 {
                     continue;
                 }
@@ -1655,7 +1658,7 @@ namespace KaleidoVR.EditorTools
                 }
             }
 
-            PruneAssetsUniqueToIgnoredHierarchy(assetPaths, selected, ignoredHierarchy, ignoreList);
+            PruneAssetsUniqueToIgnoredHierarchy(assetPaths, selected, ignoredHierarchy, ignoreList, logEntries);
             logEntries.Add("Project assets resolved: " + assetPaths.Count);
             return assetPaths;
         }
@@ -1859,16 +1862,19 @@ namespace KaleidoVR.EditorTools
             HashSet<string> assetPaths,
             List<UnityEngine.Object> selected,
             HashSet<GameObject> ignoredHierarchy,
-            List<UnityEngine.Object> ignoreList)
+            List<UnityEngine.Object> ignoreList,
+            List<string> logEntries)
         {
             if (assetPaths == null || assetPaths.Count == 0) return;
 
             HashSet<string> ignoredFamily = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             HashSet<string> keptFamily = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            HashSet<string> selectedRoots = CollectSelectedModelAndPrefabPaths(selected);
             AddIgnoreListAssetPaths(ignoreList, ignoredFamily);
 
-            if (selected != null && ignoredHierarchy != null && ignoredHierarchy.Count > 0)
+            if (selected != null && ignoreList != null && ignoreList.Count > 0)
             {
+                if (ignoredHierarchy == null) ignoredHierarchy = new HashSet<GameObject>();
                 foreach (UnityEngine.Object obj in selected)
                 {
                     if (obj == null) continue;
@@ -1893,20 +1899,59 @@ namespace KaleidoVR.EditorTools
                 }
             }
 
-            ExpandDependencyClosure(ignoredFamily);
-            ExpandDependencyClosure(keptFamily);
+            // The selected avatar prefab/FBX references every child mesh. Expanding that
+            // file would mark ignored materials as "kept" and copy them anyway.
+            foreach (string rootPath in selectedRoots)
+            {
+                ignoredFamily.Remove(rootPath);
+                keptFamily.Remove(rootPath);
+            }
+
+            ExpandDependencyClosure(ignoredFamily, selectedRoots);
+            ExpandDependencyClosure(keptFamily, selectedRoots);
 
             List<string> remove = new List<string>();
             foreach (string path in assetPaths)
             {
                 if (!ignoredFamily.Contains(path) || keptFamily.Contains(path)) continue;
+                if (selectedRoots.Contains(path)) continue;
                 remove.Add(path);
             }
 
             foreach (string path in remove)
             {
                 assetPaths.Remove(path);
+                if (logEntries != null) logEntries.Add("Ignored unique asset: " + path);
             }
+        }
+
+        private static HashSet<string> CollectSelectedModelAndPrefabPaths(List<UnityEngine.Object> selected)
+        {
+            HashSet<string> paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (selected == null) return paths;
+            foreach (UnityEngine.Object obj in selected)
+            {
+                if (obj == null) continue;
+                GameObject go = obj as GameObject;
+                if (go == null && obj is Component asComponent) go = asComponent.gameObject;
+                string path = go != null
+                    ? ResolveGameObjectAssetPath(go)
+                    : KaleidoAssetOrganizerHelpers.NormalizeAssetPath(AssetDatabase.GetAssetPath(obj));
+                if (!string.IsNullOrEmpty(path)
+                    && (IsModelFile(path) || path.EndsWith(".prefab", StringComparison.OrdinalIgnoreCase)))
+                {
+                    paths.Add(path);
+                }
+
+                if (go == null) continue;
+                string modelPath = GetGameObjectModelPath(go);
+                if (!string.IsNullOrEmpty(modelPath)
+                    && (IsModelFile(modelPath) || modelPath.EndsWith(".prefab", StringComparison.OrdinalIgnoreCase)))
+                {
+                    paths.Add(modelPath);
+                }
+            }
+            return paths;
         }
 
         private static void AddIgnoreListAssetPaths(List<UnityEngine.Object> ignoreList, HashSet<string> assetPaths)
@@ -1947,7 +1992,7 @@ namespace KaleidoVR.EditorTools
             }
         }
 
-        private static void ExpandDependencyClosure(HashSet<string> paths)
+        private static void ExpandDependencyClosure(HashSet<string> paths, HashSet<string> skipSeeds)
         {
             if (paths == null || paths.Count == 0) return;
 
@@ -1957,11 +2002,13 @@ namespace KaleidoVR.EditorTools
             {
                 if (string.IsNullOrEmpty(seedPath) || KaleidoAssetOrganizerHelpers.ShouldIgnoreAsset(seedPath)) continue;
                 if (IsModelFile(seedPath)) continue;
+                if (skipSeeds != null && skipSeeds.Contains(seedPath)) continue;
                 try
                 {
                     foreach (string depPath in AssetDatabase.GetDependencies(seedPath, true))
                     {
                         if (IsModelFile(depPath)) continue;
+                        if (skipSeeds != null && skipSeeds.Contains(depPath)) continue;
                         AddAssetPath(depPath, paths);
                     }
                 }
