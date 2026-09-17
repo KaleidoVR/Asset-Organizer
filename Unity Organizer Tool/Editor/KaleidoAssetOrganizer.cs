@@ -4345,13 +4345,7 @@ namespace KaleidoVR.EditorTools
             {
                 if (!drewSpecialWarning && IsSpecialUseExportType(key))
                 {
-                    GUILayout.Space(4);
-                    Color previous = GUI.contentColor;
-                    GUI.contentColor = EditorGUIUtility.isProSkin
-                        ? new Color(1f, 0.78f, 0.28f)
-                        : new Color(0.55f, 0.32f, 0f);
-                    GUILayout.Label("Warning (Special use case)", EditorStyles.miniBoldLabel);
-                    GUI.contentColor = previous;
+                    DrawSpecialUseWarning();
                     drewSpecialWarning = true;
                 }
 
@@ -4380,6 +4374,17 @@ namespace KaleidoVR.EditorTools
         private static bool IsSpecialUseExportType(string typeName)
         {
             return typeName == "Shader" || typeName == "MonoScript" || typeName == "DefaultAsset";
+        }
+
+        private static void DrawSpecialUseWarning()
+        {
+            GUILayout.Space(4);
+            Color previous = GUI.contentColor;
+            GUI.contentColor = EditorGUIUtility.isProSkin
+                ? new Color(1f, 0.78f, 0.28f)
+                : new Color(0.55f, 0.32f, 0f);
+            GUILayout.Label("Warning (Special use case)", EditorStyles.miniBoldLabel);
+            GUI.contentColor = previous;
         }
 
         private static string FolderPreview(string parent, string child)
@@ -4521,8 +4526,15 @@ namespace KaleidoVR.EditorTools
             EditorGUILayout.BeginHorizontal();
             GUILayout.Space(14);
             EditorGUILayout.BeginVertical();
+            bool drewSpecialWarning = false;
             foreach (string typeName in new List<string>(window.organizeOptions.Keys))
             {
+                if (!drewSpecialWarning && IsSpecialUseExportType(typeName))
+                {
+                    DrawSpecialUseWarning();
+                    drewSpecialWarning = true;
+                }
+
                 if (!layout.typeSlots.ContainsKey(typeName)) layout.typeSlots[typeName] = KaleidoOrganizerFolderLayout.SlotOther;
                 int current = Mathf.Max(0, Array.IndexOf(slotKeys, layout.typeSlots[typeName]));
                 EditorGUILayout.BeginHorizontal();
