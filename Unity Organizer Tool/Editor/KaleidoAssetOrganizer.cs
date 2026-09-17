@@ -70,6 +70,7 @@ namespace KaleidoVR.EditorTools
         public int uiTab = 0;
         public bool folderSettingsForThisOutput = false;
         public Vector2 settingsScroll;
+        public float organizeFitHeight;
         public KaleidoOrganizerFolderLayout folderLayout = KaleidoOrganizerFolderLayout.CreateDefault();
 
         [MenuItem("KaleidoVR/Asset Organizer", false, 100)]
@@ -202,7 +203,7 @@ namespace KaleidoVR.EditorTools
             KaleidoAssetOrganizerUI.DrawTabs(this);
             if (uiTab == 1)
             {
-                settingsScroll = EditorGUILayout.BeginScrollView(settingsScroll, GUILayout.MaxHeight(560f));
+                settingsScroll = EditorGUILayout.BeginScrollView(settingsScroll, GUILayout.ExpandHeight(true));
                 KaleidoAssetOrganizerUI.DrawFolderSettingsBeta(this);
                 EditorGUILayout.EndScrollView();
             }
@@ -241,20 +242,27 @@ namespace KaleidoVR.EditorTools
 
         public void ResizeWindow()
         {
-            Vector2 size = new Vector2(500f, 420f);
-            minSize = size;
-            maxSize = size;
+            minSize = new Vector2(500f, 320f);
+            maxSize = new Vector2(500f, 4000f);
         }
 
         public void FitWindowToContent()
         {
             if (Event.current.type != EventType.Repaint) return;
-            float bottom = GUILayoutUtility.GetLastRect().yMax + 8f;
-            float height = Mathf.Ceil(Mathf.Max(320f, bottom));
-            Vector2 size = new Vector2(500f, height);
-            if (minSize == size && maxSize == size) return;
-            minSize = size;
-            maxSize = size;
+
+            float measured = Mathf.Ceil(Mathf.Max(320f, GUILayoutUtility.GetLastRect().yMax + 8f));
+            if (uiTab == 0) organizeFitHeight = measured;
+
+            float organizeHeight = organizeFitHeight > 0f ? organizeFitHeight : measured;
+            Vector2 min = new Vector2(500f, organizeHeight);
+            Vector2 max = new Vector2(500f, 4000f);
+            if (minSize != min) minSize = min;
+            if (maxSize != max) maxSize = max;
+
+            if (position.height + 0.5f >= organizeHeight) return;
+            Rect next = position;
+            next.height = organizeHeight;
+            position = next;
         }
     }
 
