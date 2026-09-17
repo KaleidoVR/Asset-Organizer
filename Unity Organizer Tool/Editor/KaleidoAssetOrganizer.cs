@@ -22,7 +22,7 @@ namespace KaleidoVR.EditorTools
     public class KaleidoAssetOrganizer : EditorWindow
     {
         // Each digit rolls 0-9. After 1.0.9 comes 1.1.0; after 1.9.9 comes 2.0.0.
-        public static readonly string VERSION = "1.2.9";
+        public static readonly string VERSION = "1.2.4";
         public static string ReleaseName { get { return "Asset Organizer " + VERSION; } }
         public const string LOGO_FILE_NAME = "Kali_Logo.png";
         public const string FALLBACK_ICON_PATH = "Assets/KaleidoVR/Editor/Icons/Kali_Logo.png";
@@ -367,6 +367,15 @@ namespace KaleidoVR.EditorTools
 
         void ApplyTabWindowLimits(bool snapHeight)
         {
+            if (docked)
+            {
+                Vector2 dockMin = new Vector2(500f, 320f);
+                Vector2 dockMax = new Vector2(4000f, 4000f);
+                if (minSize != dockMin) minSize = dockMin;
+                if (maxSize != dockMax) maxSize = dockMax;
+                return;
+            }
+
             float height = OrganizeDefaultHeight();
             Vector2 min = new Vector2(500f, height);
             Vector2 max = uiTab == 0 ? new Vector2(500f, height) : new Vector2(500f, 4000f);

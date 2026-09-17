@@ -1,19 +1,19 @@
 What's new
 
-1.2.9
-Organize is locked to its content height. Settings (Beta) can still be stretched taller.
-
-1.2.8
-The native window uses the editor skin color so the first frame is not white.
-
-1.2.7
-The window opens at the Organize size without the white flash.
-
-1.2.6
-The window can grow taller. The default height still fits the Organize tab.
-Settings stays inside that height instead of expanding the window.
-Opening on Settings uses the Organize tab size so the window does not flash and grow.
-
-1.2.5
+1.2.4
+Settings (Beta) lets you rename output folders and pick where each type goes.
+Those settings can apply to all organizes or only the current output folder.
 Settings folders show as parents and children, with the full path under each child.
 Settings shows the orange special-use warning above Shader, MonoScript, and DefaultAsset.
+The header logo is smaller, and the footer says Created and maintained by KaleidoVR.
+Organize is locked to its content height while floating. Settings (Beta) can still be stretched taller.
+The window stays docked when you switch tabs.
+The native window uses the editor skin color so the first frame is not white.
+
+1.2.3
+Ignore List objects are left out of the organized prefab and scene.
+Files that belong only to those objects, including their FBX, are not copied.
+
+1.2.1
+Clear Log Cache deletes Organizer logs after a confirm prompt.
+Scripts and README say all rights reserved.
