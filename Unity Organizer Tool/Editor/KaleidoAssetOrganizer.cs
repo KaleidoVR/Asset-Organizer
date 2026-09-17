@@ -203,7 +203,10 @@ namespace KaleidoVR.EditorTools
             KaleidoAssetOrganizerUI.DrawTabs(this);
             if (uiTab == 1)
             {
-                settingsScroll = EditorGUILayout.BeginScrollView(settingsScroll, GUILayout.ExpandHeight(true));
+                const float FooterBlock = 96f;
+                float used = GUILayoutUtility.GetLastRect().yMax;
+                float scrollH = Mathf.Max(120f, position.height - used - FooterBlock);
+                settingsScroll = EditorGUILayout.BeginScrollView(settingsScroll, GUILayout.Height(scrollH));
                 KaleidoAssetOrganizerUI.DrawFolderSettingsBeta(this);
                 EditorGUILayout.EndScrollView();
             }
@@ -250,18 +253,26 @@ namespace KaleidoVR.EditorTools
         {
             if (Event.current.type != EventType.Repaint) return;
 
-            float measured = Mathf.Ceil(Mathf.Max(320f, GUILayoutUtility.GetLastRect().yMax + 8f));
-            if (uiTab == 0) organizeFitHeight = measured;
+            minSize = new Vector2(500f, 320f);
+            maxSize = new Vector2(500f, 4000f);
 
-            float organizeHeight = organizeFitHeight > 0f ? organizeFitHeight : measured;
-            Vector2 min = new Vector2(500f, organizeHeight);
-            Vector2 max = new Vector2(500f, 4000f);
-            if (minSize != min) minSize = min;
-            if (maxSize != max) maxSize = max;
+            if (uiTab == 0)
+            {
+                organizeFitHeight = Mathf.Ceil(Mathf.Max(320f, GUILayoutUtility.GetLastRect().yMax + 8f));
+                minSize = new Vector2(500f, organizeFitHeight);
+                if (position.height + 0.5f < organizeFitHeight)
+                    SetWindowHeight(organizeFitHeight);
+                return;
+            }
 
-            if (position.height + 0.5f >= organizeHeight) return;
+            if (organizeFitHeight <= 0f) return;
+            minSize = new Vector2(500f, organizeFitHeight);
+        }
+
+        void SetWindowHeight(float height)
+        {
             Rect next = position;
-            next.height = organizeHeight;
+            next.height = height;
             position = next;
         }
     }
