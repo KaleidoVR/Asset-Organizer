@@ -1,5 +1,8 @@
 What's new
 
+1.2.8
+The window paints off-screen first so it appears without the white flash.
+
 1.2.7
 The window opens at the Organize size without the white flash.
 
@@ -16,7 +19,3 @@ Settings shows the orange special-use warning above Shader, MonoScript, and Defa
 Settings (Beta) lets you rename output folders and pick where each type goes.
 The header logo is smaller, and the footer says Created and maintained by KaleidoVR.
 The window sizes to its content instead of leaving a gap at the bottom.
-
-1.2.3
-Ignore List objects are left out of the organized prefab and scene.
-Files that belong only to those objects, including their FBX, are not copied.

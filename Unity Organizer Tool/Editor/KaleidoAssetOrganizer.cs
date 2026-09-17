@@ -8,6 +8,7 @@
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.SceneManagement;
+using UnityEngine.UIElements;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using System;
@@ -21,7 +22,7 @@ namespace KaleidoVR.EditorTools
     public class KaleidoAssetOrganizer : EditorWindow
     {
         // Each digit rolls 0-9. After 1.0.9 comes 1.1.0; after 1.9.9 comes 2.0.0.
-        public static readonly string VERSION = "1.2.7";
+        public static readonly string VERSION = "1.2.8";
         public static string ReleaseName { get { return "Asset Organizer " + VERSION; } }
         public const string LOGO_FILE_NAME = "Kali_Logo.png";
         public const string FALLBACK_ICON_PATH = "Assets/KaleidoVR/Editor/Icons/Kali_Logo.png";
@@ -72,6 +73,8 @@ namespace KaleidoVR.EditorTools
         public Vector2 settingsScroll;
         public float organizeFitHeight;
         float settingsTabsBottom = 180f;
+        bool pendingReveal;
+        Rect revealRect;
         public KaleidoOrganizerFolderLayout folderLayout = KaleidoOrganizerFolderLayout.CreateDefault();
 
         [MenuItem("KaleidoVR/Asset Organizer", false, 100)]
@@ -87,8 +90,17 @@ namespace KaleidoVR.EditorTools
             window.LoadEditorPreferences();
             if (created)
             {
-                window.ApplyOrganizeDefaultSize();
-                window.CenterOverMainWindow();
+                float height = window.OrganizeDefaultHeight();
+                window.minSize = new Vector2(500f, height);
+                window.maxSize = new Vector2(500f, 4000f);
+                window.revealRect = window.MakeCenteredRect(500f, height);
+                window.pendingReveal = true;
+                Rect hidden = new Rect(-16000f, -16000f, 500f, height);
+                window.position = hidden;
+                window.Show(true);
+                window.position = hidden;
+                window.Repaint();
+                return;
             }
             window.Show();
             window.Focus();
@@ -112,6 +124,25 @@ namespace KaleidoVR.EditorTools
             float height = OrganizeDefaultHeight();
             minSize = new Vector2(500f, height);
             maxSize = new Vector2(500f, 4000f);
+        }
+
+        void CreateGUI()
+        {
+            Color bg = WindowBackgroundColor();
+            rootVisualElement.style.backgroundColor = bg;
+            rootVisualElement.style.flexGrow = 1f;
+            IMGUIContainer imgui = new IMGUIContainer(DrawWindowGUI);
+            imgui.style.flexGrow = 1f;
+            imgui.style.backgroundColor = bg;
+            imgui.StretchToParentSize();
+            rootVisualElement.Add(imgui);
+        }
+
+        static Color WindowBackgroundColor()
+        {
+            return EditorGUIUtility.isProSkin
+                ? new Color(0.22f, 0.22f, 0.22f, 1f)
+                : new Color(0.76f, 0.76f, 0.76f, 1f);
         }
 
         private void InitializeLocalLogo()
@@ -224,15 +255,10 @@ namespace KaleidoVR.EditorTools
             folderLayout.Save(outputDirectory, folderSettingsForThisOutput);
         }
 
-        private void OnGUI()
+        private void DrawWindowGUI()
         {
             if (Event.current.type == EventType.Repaint)
-            {
-                Color bg = EditorGUIUtility.isProSkin
-                    ? new Color(0.22f, 0.22f, 0.22f, 1f)
-                    : new Color(0.76f, 0.76f, 0.76f, 1f);
-                EditorGUI.DrawRect(new Rect(0f, 0f, position.width, position.height), bg);
-            }
+                EditorGUI.DrawRect(new Rect(0f, 0f, position.width, position.height), WindowBackgroundColor());
 
             EditorGUI.BeginChangeCheck(); // Watch the UI canvas frame window layout inputs for adjustments
             string outputBefore = outputDirectory;
@@ -281,6 +307,7 @@ namespace KaleidoVR.EditorTools
             }
 
             FitWindowToContent();
+            RevealAfterFirstPaint();
         }
 
         public void ResizeWindow()
@@ -306,17 +333,32 @@ namespace KaleidoVR.EditorTools
             position = next;
         }
 
-        void CenterOverMainWindow()
+        Rect MakeCenteredRect(float width, float height)
         {
             Rect main = EditorGUIUtility.GetMainWindowPosition();
-            Rect next = position;
-            next.x = main.x + Mathf.Round(Mathf.Max(0f, (main.width - next.width) * 0.5f));
-            next.y = main.y + Mathf.Round(Mathf.Max(0f, (main.height - next.height) * 0.3f));
-            position = next;
+            return new Rect(
+                main.x + Mathf.Round(Mathf.Max(0f, (main.width - width) * 0.5f)),
+                main.y + Mathf.Round(Mathf.Max(0f, (main.height - height) * 0.3f)),
+                width,
+                height);
+        }
+
+        void RevealAfterFirstPaint()
+        {
+            if (!pendingReveal || Event.current.type != EventType.Repaint) return;
+            pendingReveal = false;
+            Rect place = revealRect;
+            EditorApplication.delayCall += () =>
+            {
+                if (this == null) return;
+                position = place;
+                Focus();
+            };
         }
 
         public void FitWindowToContent()
         {
+            if (pendingReveal) return;
             if (Event.current.type != EventType.Repaint) return;
 
             if (uiTab == 0)
