@@ -1036,6 +1036,9 @@ namespace KaleidoVR.EditorTools
 
                 List<string> dependencies = new List<string>(projectAssetPaths);
                 dependencies.Sort(CompareTransferOrder);
+                HashSet<string> selectedRootPrefabPaths = window.createPrefab
+                    ? CollectSelectedPrefabAssetPaths(window.objectsToOrganize)
+                    : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
                 int totalAssets = Mathf.Max(1, dependencies.Count);
                 int currentAssetIndex = 0;
@@ -1097,6 +1100,15 @@ namespace KaleidoVR.EditorTools
 
                     if (action == "Copy" || action == "Move")
                     {
+                        if (window.createPrefab
+                            && path.EndsWith(".prefab", StringComparison.OrdinalIgnoreCase)
+                            && selectedRootPrefabPaths.Contains(path))
+                        {
+                            if (action == "Move") originalsToDeleteAfterMove.Add(path);
+                            logEntries.Add("Skipped selected prefab copy; Create Prefab writes the organized prefab: " + path);
+                            continue;
+                        }
+
                         // Both modes copy so the output always has new GUIDs. Move deletes
                         // the source files later, after remaining references are retargeted.
                         if (!TryCopyOrganizedAsset(path, window.outputDirectory, typeName, window.autoParsePoiyomi, copiedAssetsMap, copiedDestinations, movedAssetsMap, processedPaths, logEntries, action == "Move" ? "Moved" : "Copied"))
@@ -1133,10 +1145,7 @@ namespace KaleidoVR.EditorTools
                 string safePrefabName = KaleidoAssetOrganizerHelpers.SanitizeFileName(window.prefabName);
                 if (string.IsNullOrEmpty(safePrefabName)) safePrefabName = KaleidoAssetOrganizer.SAMPLE_PREFAB_NAME;
                 string transferActionName = moved > 0 ? "Move" : (copied > 0 ? "Copy" : "Ignore");
-                string primaryObjectName = GetPrimaryOrganizeName(window.objectsToOrganize);
-                string organizedObjectName = window.renameOldAndNewObjects
-                    ? FormatTransferObjectName(primaryObjectName, true, transferActionName)
-                    : safePrefabName;
+                string organizedObjectName = safePrefabName;
                 string prefabFileName = safePrefabName;
                 string savedPrefabPath = null;
                 GameObject finalTargetRoot = null;
@@ -1167,10 +1176,6 @@ namespace KaleidoVR.EditorTools
                             GameObject instance = InstantiateForPrefab(go, protectedInstanceIds);
                             if (instance != null)
                             {
-                                if (window.renameOldAndNewObjects)
-                                {
-                                    instance.name = FormatTransferObjectName(go.name, true, transferActionName);
-                                }
                                 instance.transform.SetParent(finalTargetRoot.transform);
                                 instantiatedInstances.Add(instance);
                             }
@@ -1270,7 +1275,7 @@ namespace KaleidoVR.EditorTools
                 AssetDatabase.Refresh();
                 KeepMovedSourcesIfStillReferenced(originalsToDeleteAfterMove, copiedDestinations, logEntries);
                 DeleteMovedSourceAssets(originalsToDeleteAfterMove, window.outputDirectory, logEntries);
-                SaveLeftoverOriginalPrefabs(leftoverOriginalPrefabs, logEntries);
+                SaveLeftoverOriginalPrefabs(leftoverOriginalPrefabs, window.outputDirectory, logEntries);
                 RemoveEmptyOutputFolders(window.outputDirectory, logEntries);
                 AssetDatabase.SaveAssets();
                 AssetDatabase.Refresh();
@@ -2710,23 +2715,6 @@ namespace KaleidoVR.EditorTools
             return depth;
         }
 
-        private static string GetPrimaryOrganizeName(List<UnityEngine.Object> selected)
-        {
-            if (selected != null)
-            {
-                foreach (UnityEngine.Object obj in selected)
-                {
-                    if (obj == null) continue;
-                    GameObject go = obj as GameObject;
-                    if (go == null && obj is Component asComponent) go = asComponent.gameObject;
-                    if (go != null) return StripTransferObjectSuffix(go.name);
-                    if (!string.IsNullOrEmpty(obj.name)) return StripTransferObjectSuffix(obj.name);
-                }
-            }
-
-            return "Avatar";
-        }
-
         private static string FormatTransferObjectName(string objectName, bool isNew, string action)
         {
             if (string.IsNullOrEmpty(objectName)) objectName = "Avatar";
@@ -3404,6 +3392,26 @@ namespace KaleidoVR.EditorTools
             public string originalPrefabPath;
         }
 
+        private static HashSet<string> CollectSelectedPrefabAssetPaths(List<UnityEngine.Object> selected)
+        {
+            HashSet<string> paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (selected == null) return paths;
+            foreach (UnityEngine.Object obj in selected)
+            {
+                if (obj == null) continue;
+                GameObject go = obj as GameObject;
+                if (go == null && obj is Component asComponent) go = asComponent.gameObject;
+                string prefabPath = go != null ? ResolveGameObjectAssetPath(go) : AssetDatabase.GetAssetPath(obj);
+                prefabPath = KaleidoAssetOrganizerHelpers.NormalizeAssetPath(prefabPath);
+                if (!string.IsNullOrEmpty(prefabPath)
+                    && prefabPath.EndsWith(".prefab", StringComparison.OrdinalIgnoreCase))
+                {
+                    paths.Add(prefabPath);
+                }
+            }
+            return paths;
+        }
+
         private static HashSet<string> CollectSelectedMovedPrefabPaths(List<UnityEngine.Object> selected, HashSet<string> originalsToDelete)
         {
             HashSet<string> paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -3428,7 +3436,7 @@ namespace KaleidoVR.EditorTools
             return paths;
         }
 
-        private static void SaveLeftoverOriginalPrefabs(List<LeftoverOriginalPrefab> leftoverOriginalPrefabs, List<string> logEntries)
+        private static void SaveLeftoverOriginalPrefabs(List<LeftoverOriginalPrefab> leftoverOriginalPrefabs, string outputDirectory, List<string> logEntries)
         {
             if (leftoverOriginalPrefabs == null || leftoverOriginalPrefabs.Count == 0) return;
 
@@ -3437,6 +3445,11 @@ namespace KaleidoVR.EditorTools
                 if (leftover.instance == null || string.IsNullOrEmpty(leftover.originalPrefabPath)) continue;
 
                 string destPath = leftover.originalPrefabPath;
+                if (KaleidoAssetOrganizerHelpers.IsSameOrInside(destPath, outputDirectory))
+                {
+                    if (logEntries != null) logEntries.Add("Skipped leftover original prefab inside output: " + destPath);
+                    continue;
+                }
                 if (AssetDatabase.LoadMainAssetAtPath(destPath) != null)
                 {
                     string directory = Path.GetDirectoryName(destPath);
