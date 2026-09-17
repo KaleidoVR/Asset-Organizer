@@ -73,8 +73,6 @@ namespace KaleidoVR.EditorTools
         public Vector2 settingsScroll;
         public float organizeFitHeight;
         float settingsTabsBottom = 180f;
-        bool pendingReveal;
-        Rect revealRect;
         public KaleidoOrganizerFolderLayout folderLayout = KaleidoOrganizerFolderLayout.CreateDefault();
 
         [MenuItem("KaleidoVR/Asset Organizer", false, 100)]
@@ -93,16 +91,12 @@ namespace KaleidoVR.EditorTools
                 float height = window.OrganizeDefaultHeight();
                 window.minSize = new Vector2(500f, height);
                 window.maxSize = new Vector2(500f, 4000f);
-                window.revealRect = window.MakeCenteredRect(500f, height);
-                window.pendingReveal = true;
-                Rect hidden = new Rect(-16000f, -16000f, 500f, height);
-                window.position = hidden;
-                window.Show(true);
-                window.position = hidden;
-                window.Repaint();
-                return;
+                window.position = window.MakeCenteredRect(500f, height);
             }
+            FreezeNativeDisplay(true);
             window.Show();
+            window.ApplyNativeBackgroundColor();
+            FreezeNativeDisplay(false);
             window.Focus();
         }
 
@@ -136,6 +130,7 @@ namespace KaleidoVR.EditorTools
             imgui.style.backgroundColor = bg;
             imgui.StretchToParentSize();
             rootVisualElement.Add(imgui);
+            ApplyNativeBackgroundColor();
         }
 
         static Color WindowBackgroundColor()
@@ -143,6 +138,55 @@ namespace KaleidoVR.EditorTools
             return EditorGUIUtility.isProSkin
                 ? new Color(0.22f, 0.22f, 0.22f, 1f)
                 : new Color(0.76f, 0.76f, 0.76f, 1f);
+        }
+
+        static Color NativeWindowBackgroundColor()
+        {
+            return EditorGUIUtility.isProSkin
+                ? new Color(0.098f, 0.098f, 0.098f, 1f)
+                : new Color(0.541f, 0.541f, 0.541f, 1f);
+        }
+
+        static void FreezeNativeDisplay(bool freeze)
+        {
+            try
+            {
+                Type containerType = typeof(EditorWindow).Assembly.GetType("UnityEditor.ContainerWindow");
+                MethodInfo freezeMethod = containerType != null
+                    ? containerType.GetMethod("SetFreezeDisplay", BindingFlags.Public | BindingFlags.Static)
+                    : null;
+                if (freezeMethod != null)
+                    freezeMethod.Invoke(null, new object[] { freeze });
+            }
+            catch (Exception)
+            {
+            }
+        }
+
+        void ApplyNativeBackgroundColor()
+        {
+            try
+            {
+                FieldInfo parentField = typeof(EditorWindow).GetField("m_Parent", BindingFlags.Instance | BindingFlags.NonPublic);
+                object parent = parentField != null ? parentField.GetValue(this) : null;
+                if (parent == null) return;
+
+                PropertyInfo windowProp = parent.GetType().GetProperty("window", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.FlattenHierarchy);
+                object container = windowProp != null ? windowProp.GetValue(parent, null) : null;
+                if (container != null)
+                {
+                    MethodInfo setBg = container.GetType().GetMethod("SetBackgroundColor", BindingFlags.Instance | BindingFlags.NonPublic);
+                    if (setBg != null)
+                        setBg.Invoke(container, new object[] { NativeWindowBackgroundColor() });
+                }
+
+                MethodInfo repaintNow = parent.GetType().GetMethod("RepaintImmediately", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (repaintNow != null)
+                    repaintNow.Invoke(parent, null);
+            }
+            catch (Exception)
+            {
+            }
         }
 
         private void InitializeLocalLogo()
@@ -307,7 +351,6 @@ namespace KaleidoVR.EditorTools
             }
 
             FitWindowToContent();
-            RevealAfterFirstPaint();
         }
 
         public void ResizeWindow()
@@ -343,22 +386,8 @@ namespace KaleidoVR.EditorTools
                 height);
         }
 
-        void RevealAfterFirstPaint()
-        {
-            if (!pendingReveal || Event.current.type != EventType.Repaint) return;
-            pendingReveal = false;
-            Rect place = revealRect;
-            EditorApplication.delayCall += () =>
-            {
-                if (this == null) return;
-                position = place;
-                Focus();
-            };
-        }
-
         public void FitWindowToContent()
         {
-            if (pendingReveal) return;
             if (Event.current.type != EventType.Repaint) return;
 
             if (uiTab == 0)

@@ -1,7 +1,7 @@
 What's new
 
 1.2.8
-The window paints off-screen first so it appears without the white flash.
+The native window uses the editor skin color so the first frame is not white.
 
 1.2.7
 The window opens at the Organize size without the white flash.
