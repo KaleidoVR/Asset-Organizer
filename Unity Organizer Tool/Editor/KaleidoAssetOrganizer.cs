@@ -39,7 +39,6 @@ namespace KaleidoVR.EditorTools
         public const string SAMPLE_PREFAB_NAME = "Name your Prefab here";
         public string sceneName = SAMPLE_SCENE_NAME;
         public string prefabName = SAMPLE_PREFAB_NAME;
-        public bool createPrefab = true;
         public bool renameOldAndNewObjects = false;
 
         public bool autoParsePoiyomi = true;
@@ -249,7 +248,6 @@ namespace KaleidoVR.EditorTools
             if (EditorPrefs.HasKey("KVR_PrefabName")) prefabName = EditorPrefs.GetString("KVR_PrefabName");
             if (KaleidoAssetOrganizerUI.IsSampleSceneName(sceneName)) sceneName = SAMPLE_SCENE_NAME;
             if (KaleidoAssetOrganizerUI.IsSamplePrefabName(prefabName)) prefabName = SAMPLE_PREFAB_NAME;
-            if (EditorPrefs.HasKey("KVR_CreatePrefab")) createPrefab = EditorPrefs.GetBool("KVR_CreatePrefab");
             renameOldAndNewObjects = false;
             if (EditorPrefs.HasKey("KVR_RenameOldNewV2")) renameOldAndNewObjects = EditorPrefs.GetBool("KVR_RenameOldNewV2");
             if (EditorPrefs.HasKey("KVR_UITab")) uiTab = EditorPrefs.GetInt("KVR_UITab");
@@ -281,7 +279,6 @@ namespace KaleidoVR.EditorTools
             EditorPrefs.SetString("KVR_OutputDir", outputDirectory);
             EditorPrefs.SetString("KVR_SceneName", sceneName);
             EditorPrefs.SetString("KVR_PrefabName", prefabName);
-            EditorPrefs.SetBool("KVR_CreatePrefab", createPrefab);
             EditorPrefs.SetBool("KVR_RenameOldNewV2", renameOldAndNewObjects);
             EditorPrefs.SetInt("KVR_UITab", uiTab);
             EditorPrefs.SetBool("KVR_Fold_ThisOutput", folderSettingsForThisOutput);
@@ -1040,9 +1037,7 @@ namespace KaleidoVR.EditorTools
 
                 List<string> dependencies = new List<string>(projectAssetPaths);
                 dependencies.Sort(CompareTransferOrder);
-                HashSet<string> selectedRootPrefabPaths = window.createPrefab
-                    ? CollectSelectedPrefabAssetPaths(window.objectsToOrganize)
-                    : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                HashSet<string> selectedRootPrefabPaths = CollectSelectedPrefabAssetPaths(window.objectsToOrganize);
 
                 int totalAssets = Mathf.Max(1, dependencies.Count);
                 int currentAssetIndex = 0;
@@ -1104,12 +1099,11 @@ namespace KaleidoVR.EditorTools
 
                     if (action == "Copy" || action == "Move")
                     {
-                        if (window.createPrefab
-                            && path.EndsWith(".prefab", StringComparison.OrdinalIgnoreCase))
+                        if (path.EndsWith(".prefab", StringComparison.OrdinalIgnoreCase))
                         {
                             if (action == "Move" && selectedRootPrefabPaths.Contains(path))
                                 originalsToDeleteAfterMove.Add(path);
-                            logEntries.Add("Skipped prefab copy; Create Prefab packs the organized prefab: " + path);
+                            logEntries.Add("Skipped prefab copy; the organized prefab is packed from the Hierarchy: " + path);
                             continue;
                         }
 
@@ -1209,26 +1203,23 @@ namespace KaleidoVR.EditorTools
                             ApplyVRCDescriptorSetup(finalTargetRoot, activeTargetGameObjects[0], copiedAssetsMap);
                         }
 
-                        if (window.createPrefab)
+                        string prefabFolderName = KaleidoAssetOrganizerHelpers.GetTargetFolder("PrefabRoot", ".prefab", false);
+                        string prefabFolder = $"{window.outputDirectory}/{prefabFolderName}".Replace("\\", "/");
+                        string prefabPath = $"{prefabFolder}/{prefabFileName}.prefab";
+                        if (!EnsureSingleAssetDirectory(prefabFolder))
                         {
-                            string prefabFolderName = KaleidoAssetOrganizerHelpers.GetTargetFolder("PrefabRoot", ".prefab", false);
-                            string prefabFolder = $"{window.outputDirectory}/{prefabFolderName}".Replace("\\", "/");
-                            string prefabPath = $"{prefabFolder}/{prefabFileName}.prefab";
-                            if (!EnsureSingleAssetDirectory(prefabFolder))
+                            logEntries.Add("Prefab folder create failed: " + prefabFolder);
+                        }
+                        else
+                        {
+                            if (protectedAssetPaths.Contains(prefabPath) || AssetDatabase.LoadMainAssetAtPath(prefabPath) != null)
                             {
-                                logEntries.Add("Prefab folder create failed: " + prefabFolder);
+                                prefabPath = AssetDatabase.GenerateUniqueAssetPath(prefabPath);
                             }
-                            else
-                            {
-                                if (protectedAssetPaths.Contains(prefabPath) || AssetDatabase.LoadMainAssetAtPath(prefabPath) != null)
-                                {
-                                    prefabPath = AssetDatabase.GenerateUniqueAssetPath(prefabPath);
-                                }
-                                AssetDatabase.SaveAssets();
-                                PrefabUtility.SaveAsPrefabAsset(finalTargetRoot, prefabPath);
-                                savedPrefabPath = prefabPath;
-                                logEntries.Add("Prefab saved: " + prefabPath);
-                            }
+                            AssetDatabase.SaveAssets();
+                            PrefabUtility.SaveAsPrefabAsset(finalTargetRoot, prefabPath);
+                            savedPrefabPath = prefabPath;
+                            logEntries.Add("Prefab saved: " + prefabPath);
                         }
 
                         bool consumedWorkingRoot;
@@ -4470,7 +4461,6 @@ namespace KaleidoVR.EditorTools
 
             float originalLabelWidth = EditorGUIUtility.labelWidth;
             EditorGUIUtility.labelWidth = 220f;
-            window.createPrefab = EditorGUILayout.Toggle("Create Prefab", window.createPrefab);
             window.renameOldAndNewObjects = EditorGUILayout.Toggle("Rename Old / New Objects", window.renameOldAndNewObjects);
             EditorGUIUtility.labelWidth = originalLabelWidth;
         }
