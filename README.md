@@ -33,7 +33,7 @@ The VRChat SDK3 Avatars package is only needed for the **Auto-Link FX & Menu** o
 
 1. Set **Output Directory** with **Select Folder**. It must be inside `Assets`.
 2. Drag your avatar into **Objects to Organize**. Project FBX/prefab assets work, and so do scene instances — those resolve back to their source asset.
-3. Optionally set **Scene Name** and **Prefab Name**, and drag anything you want left out of the new prefab and scene into the **Ignore List**.
+3. Optionally set **Scene Name** and **Prefab Name**, and drag anything you want left out of the new prefab and scene into the **Ignore List**. Files that belong only to those objects, including unique materials and textures, stay out of the output.
 4. Press **Organize Assets**.
 
 The **Scene Name** and **Prefab Name** fields auto-fill from the first object you drop in. Organizing always writes a scene named after **Scene Name** and a packed prefab named after **Prefab Name** into `<output>/Prefabs/`. Nested hair, clothes, and the original avatar prefab are unpacked into that one prefab. They are not copied as extra `.prefab` files.
@@ -44,7 +44,7 @@ Use the **Settings (Beta)** tab if you want to rename those output folders or se
 
 Each asset type can be set to one of three actions:
 
-- **Copy** — duplicate the asset into the output folder, leaving the original in place. This is the default and the safe choice.
+- **Copy** — duplicate the asset into the output folder, leaving the original in place. This is the default.
 - **Move** — relocate the original into the output folder. Use only when you intend to move your source files.
 - **Ignore** — skip the type entirely.
 
