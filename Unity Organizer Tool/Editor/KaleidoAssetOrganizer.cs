@@ -1105,11 +1105,11 @@ namespace KaleidoVR.EditorTools
                     if (action == "Copy" || action == "Move")
                     {
                         if (window.createPrefab
-                            && path.EndsWith(".prefab", StringComparison.OrdinalIgnoreCase)
-                            && selectedRootPrefabPaths.Contains(path))
+                            && path.EndsWith(".prefab", StringComparison.OrdinalIgnoreCase))
                         {
-                            if (action == "Move") originalsToDeleteAfterMove.Add(path);
-                            logEntries.Add("Skipped selected prefab copy; Create Prefab writes the organized prefab: " + path);
+                            if (action == "Move" && selectedRootPrefabPaths.Contains(path))
+                                originalsToDeleteAfterMove.Add(path);
+                            logEntries.Add("Skipped prefab copy; Create Prefab packs the organized prefab: " + path);
                             continue;
                         }
 
@@ -1188,18 +1188,7 @@ namespace KaleidoVR.EditorTools
 
                     if (finalTargetRoot != null && !IsProtectedObject(finalTargetRoot, protectedInstanceIds))
                     {
-                        if (PrefabUtility.IsPartOfPrefabInstance(finalTargetRoot))
-                        {
-                            PrefabUtility.UnpackPrefabInstance(finalTargetRoot, PrefabUnpackMode.Completely, InteractionMode.AutomatedAction);
-                        }
-
-                        foreach (GameObject inst in instantiatedInstances)
-                        {
-                            if (inst != null && inst != finalTargetRoot && !IsProtectedObject(inst, protectedInstanceIds) && PrefabUtility.IsPartOfPrefabInstance(inst))
-                            {
-                                PrefabUtility.UnpackPrefabInstance(inst, PrefabUnpackMode.Completely, InteractionMode.AutomatedAction);
-                            }
-                        }
+                        UnpackAllPrefabInstances(finalTargetRoot, protectedInstanceIds);
 
                         StripIgnoredObjectsFromOrganizedHierarchy(
                             instantiatedInstances,
@@ -2489,6 +2478,36 @@ namespace KaleidoVR.EditorTools
             }
 
             return instance;
+        }
+
+        private static void UnpackAllPrefabInstances(GameObject root, HashSet<int> protectedInstanceIds)
+        {
+            if (root == null) return;
+
+            List<GameObject> instanceRoots = new List<GameObject>();
+            HashSet<int> seen = new HashSet<int>();
+            Transform[] transforms = root.GetComponentsInChildren<Transform>(true);
+            if (transforms == null) return;
+            foreach (Transform transform in transforms)
+            {
+                if (transform == null) continue;
+                GameObject go = transform.gameObject;
+                if (IsProtectedObject(go, protectedInstanceIds)) continue;
+                if (!PrefabUtility.IsPartOfPrefabInstance(go)) continue;
+                GameObject instanceRoot = PrefabUtility.GetOutermostPrefabInstanceRoot(go);
+                if (instanceRoot == null) instanceRoot = go;
+                if (!instanceRoot.transform.IsChildOf(root.transform) && instanceRoot != root) continue;
+                if (!seen.Add(instanceRoot.GetInstanceID())) continue;
+                instanceRoots.Add(instanceRoot);
+            }
+
+            instanceRoots.Sort((a, b) => GetHierarchyDepth(b).CompareTo(GetHierarchyDepth(a)));
+            foreach (GameObject instanceRoot in instanceRoots)
+            {
+                if (instanceRoot == null || IsProtectedObject(instanceRoot, protectedInstanceIds)) continue;
+                if (!PrefabUtility.IsPartOfPrefabInstance(instanceRoot)) continue;
+                PrefabUtility.UnpackPrefabInstance(instanceRoot, PrefabUnpackMode.Completely, InteractionMode.AutomatedAction);
+            }
         }
 
         private static HashSet<GameObject> BuildIgnoredGameObjectSet(List<UnityEngine.Object> ignoreList, List<UnityEngine.Object> selected)
