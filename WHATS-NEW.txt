@@ -1,7 +1,10 @@
 What's new
 
+1.2.6
 Organize always packs one prefab from Prefab Name. Nested hair and clothes unpack into it. I leave old prefab files out of Prefabs. Create Prefab is gone.
 Rename Old / New Objects starts off.
+UI — Organize: Create Prefab is gone. Prefab Name is still the name on the Hierarchy object and the packed prefab.
+UI — Organize: Rename Old / New Objects starts off.
 
 1.2.5
 I name the new Hierarchy object and the new prefab from Prefab Name. Create Prefab writes that file into Prefabs. I leave the previous model prefab out of that folder.
