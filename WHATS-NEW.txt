@@ -1,23 +1,28 @@
 What's new
 
+Organize always packs one prefab from Prefab Name. Nested hair and clothes unpack into it. I leave old prefab files out of Prefabs. Create Prefab is gone.
+Rename Old / New Objects starts off.
+
 1.2.5
-The new Hierarchy object and prefab use Prefab Name.
-Create Prefab writes only that new prefab into Prefabs, not a copy of the previous model.
-Ignored objects keep their own materials and textures out of the output.
+I name the new Hierarchy object and the new prefab from Prefab Name. Create Prefab writes that file into Prefabs. I leave the previous model prefab out of that folder.
+I leave materials and textures that belong only to Ignore List objects out of the output. I still copy files the rest of the avatar still uses.
+UI — Organize: Prefab Name is the name on the new Hierarchy object and the new prefab.
+UI — Organize: Create Prefab still sits under Scene Name and Prefab Name.
+UI — Ignore List: objects you drop here stay out of the organized prefab and scene, and their unique materials and textures stay out of the folders.
 
 1.2.4
-Settings (Beta) lets you rename output folders and pick where each type goes.
-Those settings can apply to all organizes or only the current output folder.
-Settings folders show as parents and children, with the full path under each child.
-Settings shows the orange special-use warning above Shader, MonoScript, and DefaultAsset.
-The header logo is smaller, and the footer says Created and maintained by KaleidoVR.
-Organize is locked to its content height while floating. Settings (Beta) can still be stretched taller.
-The window stays docked when you switch tabs.
-The native window uses the editor skin color so the first frame is not white.
+I added Settings (Beta). You rename the output folders and pick where each type lands. Copy, Move, and Ignore stay on Organize. I can store that for every organize, or only this output folder.
+I made the header logo smaller. The footer says Created and maintained by KaleidoVR.
+Floating Organize stays at its content height. Settings (Beta) can stretch taller. I leave the window docked when you switch tabs. The window uses the editor skin color, so the first frame is not white.
+UI — Tabs: Organize and Settings (Beta) sit under the logo.
+UI — Settings (Beta): Folder layout shows parents and children, with the full path under each child, for example Textures/Normals or 3.0/Animations.
+UI — Settings (Beta): orange Warning (Special use case) sits above Shader, MonoScript, and DefaultAsset.
+UI — Settings (Beta): These settings apply to lists All organizes and This output folder only.
+UI — Footer: Created and maintained by KaleidoVR.
 
 1.2.3
-Ignore List objects are left out of the organized prefab and scene.
-Files that belong only to those objects, including their FBX, are not copied.
+I leave Ignore List objects out of the organized prefab and scene. I do not copy files that belong only to those objects, including their FBX. I still copy files the rest of the avatar still uses.
+UI — Ignore List: Drag objects to leave out of the organized prefab and scene.
 
 1.2.1
 Clear Log Cache deletes Organizer logs after a confirm prompt.
