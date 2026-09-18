@@ -38,6 +38,8 @@ The VRChat SDK3 Avatars package is only needed for the **Auto-Link FX & Menu** o
 
 The **Scene Name** and **Prefab Name** fields auto-fill from the first object you drop in. Organizing always writes a scene named after **Scene Name**. **Create Prefab** also writes a prefab into `<output>/Prefabs/` and places that prefab into the scene.
 
+Use the **Settings (Beta)** tab if you want to rename those output folders or send a type to a different folder. Copy, Move, and Ignore stay on Organize.
+
 ### Export List Options
 
 Each asset type can be set to one of three actions:
@@ -55,6 +57,33 @@ Scripts, DLLs, shaders, and anything under `Packages/`, `Assets/Editor`, `Assets
 - **Auto-Link FX & Menu** always runs on a single organized object: add or reuse a `VRCAvatarDescriptor` and assign the FX layer, expressions menu, and expression parameters.
 
 All settings persist between sessions via `EditorPrefs`.
+
+## Settings (Beta)
+
+**Settings (Beta)** is a second tab for output folder names and where each asset type lands. It does not change Copy, Move, or Ignore — those stay on Organize.
+
+### Folder layout
+
+Parents are the folders under **Output Directory**. Child rows show the full path they land in, for example `Textures/Normals` or `3.0/Animations`.
+
+Default names match the tree in **Output structure** below: Models (`FBX`), Materials, Textures (Normals, Emissions, Metallic, Roughness, AO), Audio, Prefabs, Other, and the VRChat root (`3.0`) with Animations, Blend Trees, Avatar Masks, Controllers, Menus, and Parameters.
+
+### Where each type goes
+
+Each export type has a folder dropdown. That only picks the destination folder. Copy, Move, and Ignore are still set per type on Organize.
+
+Shader, MonoScript, and DefaultAsset show an orange **Warning (Special use case)** because those types are special-use and default to Ignore on Organize.
+
+`.prefab` files always go to the Prefabs folder. Texture suffix subfolders still apply when a texture name matches normal, emission, metallic, roughness, or AO.
+
+### These settings apply to
+
+- **All organizes** — the folder layout is used for every output folder.
+- **This output folder only** — the layout is stored for the current Output Directory and does not change other folders.
+
+**Reset to defaults** restores the stock folder names and type destinations.
+
+Settings (Beta) also persists via `EditorPrefs`.
 
 ## Output structure
 
@@ -75,6 +104,8 @@ All settings persist between sessions via `EditorPrefs`.
     ├── Menus/
     └── VRCExpressionParameters/
 ```
+
+That tree is the default. **Settings (Beta)** can rename any of those folders or send a type somewhere else.
 
 ## How references are kept intact
 
