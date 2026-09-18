@@ -250,7 +250,8 @@ namespace KaleidoVR.EditorTools
             if (KaleidoAssetOrganizerUI.IsSampleSceneName(sceneName)) sceneName = SAMPLE_SCENE_NAME;
             if (KaleidoAssetOrganizerUI.IsSamplePrefabName(prefabName)) prefabName = SAMPLE_PREFAB_NAME;
             if (EditorPrefs.HasKey("KVR_CreatePrefab")) createPrefab = EditorPrefs.GetBool("KVR_CreatePrefab");
-            if (EditorPrefs.HasKey("KVR_RenameOldNew")) renameOldAndNewObjects = EditorPrefs.GetBool("KVR_RenameOldNew");
+            renameOldAndNewObjects = false;
+            if (EditorPrefs.HasKey("KVR_RenameOldNewV2")) renameOldAndNewObjects = EditorPrefs.GetBool("KVR_RenameOldNewV2");
             if (EditorPrefs.HasKey("KVR_UITab")) uiTab = EditorPrefs.GetInt("KVR_UITab");
             if (EditorPrefs.HasKey("KVR_Fold_ThisOutput")) folderSettingsForThisOutput = EditorPrefs.GetBool("KVR_Fold_ThisOutput");
             autoParsePoiyomi = true;
@@ -281,7 +282,7 @@ namespace KaleidoVR.EditorTools
             EditorPrefs.SetString("KVR_SceneName", sceneName);
             EditorPrefs.SetString("KVR_PrefabName", prefabName);
             EditorPrefs.SetBool("KVR_CreatePrefab", createPrefab);
-            EditorPrefs.SetBool("KVR_RenameOldNew", renameOldAndNewObjects);
+            EditorPrefs.SetBool("KVR_RenameOldNewV2", renameOldAndNewObjects);
             EditorPrefs.SetInt("KVR_UITab", uiTab);
             EditorPrefs.SetBool("KVR_Fold_ThisOutput", folderSettingsForThisOutput);
             if (organizeFitHeight > 0f)
