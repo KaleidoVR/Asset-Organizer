@@ -4,7 +4,7 @@
   <img src="Unity Organizer Tool/Editor/Icons/Kali_Logo.png" alt="KaleidoVR" width="300">
 </p>
 
-A Unity editor tool that sorts the assets of a VRChat avatar into a consistent folder structure, remaps their references, and writes a scene plus an optional prefab that point at those organized copies.
+A Unity editor tool that sorts the assets of a VRChat avatar into a consistent folder structure, remaps their references, and writes a scene plus a packed prefab that point at those organized copies.
 
 Drop an avatar FBX or prefab into the window, press **Organize Assets**, and its meshes, materials, textures, animations, controllers, menus, and parameters are collected and filed into one output folder.
 <p align="center">
@@ -36,7 +36,7 @@ The VRChat SDK3 Avatars package is only needed for the **Auto-Link FX & Menu** o
 3. Optionally set **Scene Name** and **Prefab Name**, and drag anything you want left out of the new prefab and scene into the **Ignore List**.
 4. Press **Organize Assets**.
 
-The **Scene Name** and **Prefab Name** fields auto-fill from the first object you drop in. Organizing always writes a scene named after **Scene Name**. **Create Prefab** also writes a prefab into `<output>/Prefabs/` and places that prefab into the scene.
+The **Scene Name** and **Prefab Name** fields auto-fill from the first object you drop in. Organizing always writes a scene named after **Scene Name** and a packed prefab named after **Prefab Name** into `<output>/Prefabs/`. Nested hair, clothes, and the original avatar prefab are unpacked into that one prefab. They are not copied as extra `.prefab` files.
 
 Use the **Settings (Beta)** tab if you want to rename those output folders or send a type to a different folder. Copy, Move, and Ignore stay on Organize.
 
@@ -50,13 +50,14 @@ Each asset type can be set to one of three actions:
 
 Scripts, DLLs, shaders, and anything under `Packages/`, `Assets/Editor`, `Assets/KaleidoVR/Editor`, or `Assets/KaleidoVR/Generated` are always skipped, so the tool will not relocate Poiyomi, the VRChat SDK, Kaleido editor scripts, or Kaleido generated cache.
 
-### Settings
+### Organize settings
 
-- **Create Prefab** — after organizing, build a prefab in `<output>/Prefabs/` whose components point at the newly organized assets.
+- Organizing always writes the packed prefab into `<output>/Prefabs/` and places that prefab into the scene.
+- **Rename Old / New Objects** — off by default. When on, leftover originals in the source scene are renamed with an Old suffix.
 - Textures are always sorted into subfolders by suffix (normal, emission, metallic, roughness, AO).
 - **Auto-Link FX & Menu** always runs on a single organized object: add or reuse a `VRCAvatarDescriptor` and assign the FX layer, expressions menu, and expression parameters.
 
-All settings persist between sessions via `EditorPrefs`.
+Organize settings persist between sessions via `EditorPrefs`.
 
 ## Settings (Beta)
 
@@ -74,7 +75,7 @@ Each export type has a folder dropdown. That only picks the destination folder. 
 
 Shader, MonoScript, and DefaultAsset show an orange **Warning (Special use case)** because those types are special-use and default to Ignore on Organize.
 
-`.prefab` files always go to the Prefabs folder. Texture suffix subfolders still apply when a texture name matches normal, emission, metallic, roughness, or AO.
+The packed result always lands in the Prefabs folder. Texture suffix subfolders still apply when a texture name matches normal, emission, metallic, roughness, or AO.
 
 ### These settings apply to
 
