@@ -458,6 +458,7 @@ namespace KaleidoVR.EditorTools
         public string roughness = "Roughness";
         public string ao = "AO";
         public string icons = "Icons";
+        public string textureMasks = "Masks";
         public string audio = "Audio";
         public string prefabs = "Prefabs";
         public string other = "Other";
@@ -488,6 +489,7 @@ namespace KaleidoVR.EditorTools
             roughness = "Roughness";
             ao = "AO";
             icons = "Icons";
+            textureMasks = "Masks";
             audio = "Audio";
             prefabs = "Prefabs";
             other = "Other";
@@ -577,6 +579,11 @@ namespace KaleidoVR.EditorTools
                 {
                     return Combine(PathForSlot(SlotTextures), Sanitize(icons, "Icons"));
                 }
+                if (KaleidoAssetOrganizerHelpers.ActiveMaskTexturePaths != null
+                    && KaleidoAssetOrganizerHelpers.ActiveMaskTexturePaths.Contains(normalizedPath))
+                {
+                    return Combine(PathForSlot(SlotTextures), Sanitize(textureMasks, "Masks"));
+                }
             }
 
             if (parsePoiyomi && typeName == "Texture2D" && !string.IsNullOrEmpty(assetPath))
@@ -613,6 +620,7 @@ namespace KaleidoVR.EditorTools
             roughness = EditorPrefs.GetString(prefix + "roughness", "Roughness");
             ao = EditorPrefs.GetString(prefix + "ao", "AO");
             icons = EditorPrefs.GetString(prefix + "icons", "Icons");
+            textureMasks = EditorPrefs.GetString(prefix + "textureMasks", "Masks");
             audio = EditorPrefs.GetString(prefix + "audio", "Audio");
             prefabs = EditorPrefs.GetString(prefix + "prefabs", "Prefabs");
             other = EditorPrefs.GetString(prefix + "other", "Other");
@@ -644,6 +652,7 @@ namespace KaleidoVR.EditorTools
             EditorPrefs.SetString(prefix + "roughness", roughness);
             EditorPrefs.SetString(prefix + "ao", ao);
             EditorPrefs.SetString(prefix + "icons", icons);
+            EditorPrefs.SetString(prefix + "textureMasks", textureMasks);
             EditorPrefs.SetString(prefix + "audio", audio);
             EditorPrefs.SetString(prefix + "prefabs", prefabs);
             EditorPrefs.SetString(prefix + "other", other);
@@ -959,6 +968,7 @@ namespace KaleidoVR.EditorTools
 
         public static KaleidoOrganizerFolderLayout ActiveFolderLayout;
         public static HashSet<string> ActiveMenuIconPaths;
+        public static HashSet<string> ActiveMaskTexturePaths;
 
         public static string GetTargetFolder(string typeName, string assetPath = "", bool parsePoiyomi = false)
         {
@@ -1043,6 +1053,11 @@ namespace KaleidoVR.EditorTools
                 if (KaleidoAssetOrganizerHelpers.ActiveMenuIconPaths.Count > 0)
                 {
                     logEntries.Add("VRChat menu icons: " + KaleidoAssetOrganizerHelpers.ActiveMenuIconPaths.Count);
+                }
+                KaleidoAssetOrganizerHelpers.ActiveMaskTexturePaths = CollectMaskTexturePaths(projectAssetPaths);
+                if (KaleidoAssetOrganizerHelpers.ActiveMaskTexturePaths.Count > 0)
+                {
+                    logEntries.Add("LilToon / Poiyomi mask textures: " + KaleidoAssetOrganizerHelpers.ActiveMaskTexturePaths.Count);
                 }
 
                 if (projectAssetPaths.Count == 0)
@@ -1302,6 +1317,7 @@ namespace KaleidoVR.EditorTools
             {
                 KaleidoAssetOrganizerHelpers.ActiveFolderLayout = null;
                 KaleidoAssetOrganizerHelpers.ActiveMenuIconPaths = null;
+                KaleidoAssetOrganizerHelpers.ActiveMaskTexturePaths = null;
                 LockCopiedPoiyomiMaterials(copiedDestinations, logEntries);
                 if (poiyomiUnlockedToRelock.Count > 0)
                 {
@@ -1726,6 +1742,73 @@ namespace KaleidoVR.EditorTools
             if (main == null) return false;
             if (menuType != null && menuType.IsAssignableFrom(main.GetType())) return true;
             return KaleidoAssetOrganizerHelpers.ResolveExportTypeName(path, main, main) == "VRCExpressionsMenu";
+        }
+
+        private static HashSet<string> CollectMaskTexturePaths(IEnumerable<string> assetPaths)
+        {
+            HashSet<string> masks = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (assetPaths == null) return masks;
+
+            foreach (string path in assetPaths)
+            {
+                if (string.IsNullOrEmpty(path) || KaleidoAssetOrganizerHelpers.ShouldIgnoreAsset(path)) continue;
+                Material material = AssetDatabase.LoadAssetAtPath<Material>(path);
+                if (material == null || !IsLilToonOrPoiyomiMaterial(material)) continue;
+
+                string[] propertyNames;
+                try
+                {
+                    propertyNames = material.GetTexturePropertyNames();
+                }
+                catch (Exception)
+                {
+                    continue;
+                }
+                if (propertyNames == null) continue;
+
+                foreach (string propertyName in propertyNames)
+                {
+                    if (string.IsNullOrEmpty(propertyName)
+                        || propertyName.IndexOf("Mask", StringComparison.OrdinalIgnoreCase) < 0)
+                    {
+                        continue;
+                    }
+
+                    Texture texture;
+                    try
+                    {
+                        texture = material.GetTexture(propertyName);
+                    }
+                    catch (Exception)
+                    {
+                        continue;
+                    }
+                    if (texture == null) continue;
+
+                    string texturePath = KaleidoAssetOrganizerHelpers.NormalizeAssetPath(AssetDatabase.GetAssetPath(texture));
+                    if (!string.IsNullOrEmpty(texturePath) && !KaleidoAssetOrganizerHelpers.ShouldIgnoreAsset(texturePath))
+                        masks.Add(texturePath);
+                }
+            }
+
+            return masks;
+        }
+
+        private static bool IsLilToonOrPoiyomiMaterial(Material material)
+        {
+            if (material == null) return false;
+            if (IsPoiyomiMaterial(material)) return true;
+            return IsLilToonMaterial(material);
+        }
+
+        private static bool IsLilToonMaterial(Material material)
+        {
+            if (material == null || material.shader == null) return false;
+            string shaderName = material.shader.name;
+            if (string.IsNullOrEmpty(shaderName)) return false;
+            return shaderName.IndexOf("lilToon", StringComparison.OrdinalIgnoreCase) >= 0
+                || shaderName.IndexOf("Hidden/lil", StringComparison.OrdinalIgnoreCase) >= 0
+                || shaderName.StartsWith("_lil/", StringComparison.OrdinalIgnoreCase);
         }
 
         private static bool IsSelectionAlreadyInOutput(List<UnityEngine.Object> selected, string outputDirectory)
