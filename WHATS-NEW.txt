@@ -1,5 +1,10 @@
 What's new
 
+1.2.7
+I lock every new Poiyomi material after Organize. I unlock locked copies first so their textures can follow the new files.
+Organize puts VRChat menu icons in Textures/Icons. LilToon and Poiyomi Mask slots go to Textures/Masks. Cubemaps go to Textures/CubeMaps.
+UI — Settings (Beta): Icons, Masks, and CubeMaps sit under Textures. You can rename them.
+
 1.2.6
 Organize always packs one prefab from Prefab Name. Nested hair and clothes unpack into it. I leave old prefab files out of Prefabs. Create Prefab is gone.
 Rename Old / New Objects starts off.
