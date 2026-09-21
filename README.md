@@ -31,12 +31,12 @@ The VRChat SDK3 Avatars package is only needed for the **Auto-Link FX & Menu** o
 
 ## Usage
 
-1. Set **Output Directory** with **Select Folder**. It must be inside `Assets`.
-2. Drag your avatar into **Objects to Organize**. Project FBX/prefab assets work, and so do scene instances — those resolve back to their source asset.
-3. Optionally set **Scene Name** and **Prefab Name**, and drag anything you want left out of the new prefab and scene into the **Ignore List**. Files that belong only to those objects, including unique materials and textures, stay out of the output.
+1. Set **Output Directory** with **Select Folder**. It has to be inside `Assets`.
+2. Drop your avatar into **Objects to Organize**. Project FBX/prefab assets work, and so do scene instances — those resolve back to their source asset.
+3. You can set **Scene Name** and **Prefab Name**, and drop anything you want left out of the new prefab and scene into the **Ignore List**. I leave files that belong only to those objects, including unique materials and textures, out of the output.
 4. Press **Organize Assets**.
 
-The **Scene Name** and **Prefab Name** fields auto-fill from the first object you drop in. Organizing always writes a scene named after **Scene Name** and a packed prefab named after **Prefab Name** into `<output>/Prefabs/`. Nested hair, clothes, and the original avatar prefab are unpacked into that one prefab. They are not copied as extra `.prefab` files.
+**Scene Name** and **Prefab Name** fill from the first object you drop in. I always write a scene named after **Scene Name** and a packed prefab named after **Prefab Name** into `<output>/Prefabs/`. Nested hair, clothes, and the original avatar prefab unpack into that one prefab. I do not copy them as extra `.prefab` files.
 
 Use the **Settings (Beta)** tab if you want to rename those output folders or send a type to a different folder. Copy, Move, and Ignore stay on Organize.
 
@@ -52,9 +52,10 @@ Scripts, DLLs, shaders, and anything under `Packages/`, `Assets/Editor`, `Assets
 
 ### Organize settings
 
-- Organizing always writes the packed prefab into `<output>/Prefabs/` and places that prefab into the scene.
-- **Rename Old / New Objects** — off by default. When on, leftover originals in the source scene are renamed with an Old suffix.
-- Textures are always sorted into subfolders by suffix (normal, emission, metallic, roughness, AO).
+- I always write the packed prefab into `<output>/Prefabs/` and place that prefab into the scene.
+- **Rename Old / New Objects** — off by default. When on, leftover originals in the source scene get an Old suffix.
+- I sort textures into subfolders: suffix maps (normal, emission, metallic, roughness, AO), VRChat menu icons (`Icons`), LilToon and Poiyomi Mask slots (`Masks`), and cubemaps (`CubeMaps`). Menu icons win over Masks. Masks win over CubeMaps. Those win over the suffix folders.
+- I lock every new Poiyomi material after Organize. I unlock locked copies first so their textures can follow the new files. You need Poiyomi/Thry in the project for that. LilToon materials stay as they are.
 - **Auto-Link FX & Menu** always runs on a single organized object: add or reuse a `VRCAvatarDescriptor` and assign the FX layer, expressions menu, and expression parameters.
 
 Organize settings persist between sessions via `EditorPrefs`.
@@ -67,7 +68,7 @@ Organize settings persist between sessions via `EditorPrefs`.
 
 Parents are the folders under **Output Directory**. Child rows show the full path they land in, for example `Textures/Normals` or `3.0/Animations`.
 
-Default names match the tree in **Output structure** below: Models (`FBX`), Materials, Textures (Normals, Emissions, Metallic, Roughness, AO), Audio, Prefabs, Other, and the VRChat root (`3.0`) with Animations, Blend Trees, Avatar Masks, Controllers, Menus, and Parameters.
+Default names match the tree in **Output structure** below: Models (`FBX`), Materials, Textures (Normals, Emissions, Metallic, Roughness, AO, Icons, Masks, CubeMaps), Audio, Prefabs, Other, and the VRChat root (`3.0`) with Animations, Blend Trees, Avatar Masks, Controllers, Menus, and Parameters.
 
 ### Where each type goes
 
@@ -75,7 +76,7 @@ Each export type has a folder dropdown. That only picks the destination folder. 
 
 Shader, MonoScript, and DefaultAsset show an orange **Warning (Special use case)** because those types are special-use and default to Ignore on Organize.
 
-The packed result always lands in the Prefabs folder. Texture suffix subfolders still apply when a texture name matches normal, emission, metallic, roughness, or AO.
+The packed result always lands in the Prefabs folder. Texture suffix subfolders still apply when a texture name matches normal, emission, metallic, roughness, or AO. Menu icons, Mask-slot textures, and cubemaps take their own folders first. You can rename Icons, Masks, and CubeMaps here.
 
 ### These settings apply to
 
@@ -93,7 +94,15 @@ Settings (Beta) also persists via `EditorPrefs`.
 ├── <Scene Name>.unity
 ├── FBX/
 ├── Materials/
-├── Textures/                       (Normals, Emissions, Metallic, Roughness, AO)
+├── Textures/
+│   ├── Normals/
+│   ├── Emissions/
+│   ├── Metallic/
+│   ├── Roughness/
+│   ├── AO/
+│   ├── Icons/
+│   ├── Masks/
+│   └── CubeMaps/
 ├── Audio/
 ├── Prefabs/
 ├── Other/
@@ -106,7 +115,7 @@ Settings (Beta) also persists via `EditorPrefs`.
     └── VRCExpressionParameters/
 ```
 
-That tree is the default. **Settings (Beta)** can rename any of those folders or send a type somewhere else.
+That tree is the default. **Settings (Beta)** can rename any of those folders or send a type somewhere else. Empty texture children are not kept if that organize did not write files into them.
 
 ## How references are kept intact
 
