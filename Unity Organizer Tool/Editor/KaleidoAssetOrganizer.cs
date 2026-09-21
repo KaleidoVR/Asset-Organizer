@@ -5006,6 +5006,7 @@ namespace KaleidoVR.EditorTools
             layout.ao = DrawChildFolderField("AO", layout.ao, layout.textures);
             layout.icons = DrawChildFolderField("Icons", layout.icons, layout.textures);
             layout.textureMasks = DrawChildFolderField("Masks", layout.textureMasks, layout.textures);
+            layout.cubeMaps = DrawChildFolderField("CubeMaps", layout.cubeMaps, layout.textures);
             GUILayout.Space(6);
             layout.audio = DrawParentFolderField("Audio", layout.audio);
             layout.prefabs = DrawParentFolderField("Prefabs", layout.prefabs);
