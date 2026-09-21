@@ -459,6 +459,7 @@ namespace KaleidoVR.EditorTools
         public string ao = "AO";
         public string icons = "Icons";
         public string textureMasks = "Masks";
+        public string cubeMaps = "CubeMaps";
         public string audio = "Audio";
         public string prefabs = "Prefabs";
         public string other = "Other";
@@ -490,6 +491,7 @@ namespace KaleidoVR.EditorTools
             ao = "AO";
             icons = "Icons";
             textureMasks = "Masks";
+            cubeMaps = "CubeMaps";
             audio = "Audio";
             prefabs = "Prefabs";
             other = "Other";
@@ -571,18 +573,25 @@ namespace KaleidoVR.EditorTools
             if (!string.IsNullOrEmpty(assetPath) && assetPath.EndsWith(".prefab", StringComparison.OrdinalIgnoreCase))
                 return PathForSlot(SlotPrefabs);
 
-            if (typeName == "Texture2D" && !string.IsNullOrEmpty(assetPath))
+            if (!string.IsNullOrEmpty(assetPath))
             {
                 string normalizedPath = KaleidoAssetOrganizerHelpers.NormalizeAssetPath(assetPath);
-                if (KaleidoAssetOrganizerHelpers.ActiveMenuIconPaths != null
+                if (typeName == "Texture2D"
+                    && KaleidoAssetOrganizerHelpers.ActiveMenuIconPaths != null
                     && KaleidoAssetOrganizerHelpers.ActiveMenuIconPaths.Contains(normalizedPath))
                 {
                     return Combine(PathForSlot(SlotTextures), Sanitize(icons, "Icons"));
                 }
-                if (KaleidoAssetOrganizerHelpers.ActiveMaskTexturePaths != null
+                if ((typeName == "Texture2D" || typeName == "Cubemap")
+                    && KaleidoAssetOrganizerHelpers.ActiveMaskTexturePaths != null
                     && KaleidoAssetOrganizerHelpers.ActiveMaskTexturePaths.Contains(normalizedPath))
                 {
                     return Combine(PathForSlot(SlotTextures), Sanitize(textureMasks, "Masks"));
+                }
+                if (typeName == "Cubemap" || typeName == "CubemapArray"
+                    || KaleidoAssetOrganizerHelpers.IsCubeTexturePath(normalizedPath))
+                {
+                    return Combine(PathForSlot(SlotTextures), Sanitize(cubeMaps, "CubeMaps"));
                 }
             }
 
@@ -621,6 +630,7 @@ namespace KaleidoVR.EditorTools
             ao = EditorPrefs.GetString(prefix + "ao", "AO");
             icons = EditorPrefs.GetString(prefix + "icons", "Icons");
             textureMasks = EditorPrefs.GetString(prefix + "textureMasks", "Masks");
+            cubeMaps = EditorPrefs.GetString(prefix + "cubeMaps", "CubeMaps");
             audio = EditorPrefs.GetString(prefix + "audio", "Audio");
             prefabs = EditorPrefs.GetString(prefix + "prefabs", "Prefabs");
             other = EditorPrefs.GetString(prefix + "other", "Other");
@@ -653,6 +663,7 @@ namespace KaleidoVR.EditorTools
             EditorPrefs.SetString(prefix + "ao", ao);
             EditorPrefs.SetString(prefix + "icons", icons);
             EditorPrefs.SetString(prefix + "textureMasks", textureMasks);
+            EditorPrefs.SetString(prefix + "cubeMaps", cubeMaps);
             EditorPrefs.SetString(prefix + "audio", audio);
             EditorPrefs.SetString(prefix + "prefabs", prefabs);
             EditorPrefs.SetString(prefix + "other", other);
@@ -839,6 +850,14 @@ namespace KaleidoVR.EditorTools
             return path.Replace("\\", "/").Trim().TrimEnd('/');
         }
 
+        public static bool IsCubeTexturePath(string path)
+        {
+            path = NormalizeAssetPath(path);
+            if (string.IsNullOrEmpty(path)) return false;
+            TextureImporter importer = AssetImporter.GetAtPath(path) as TextureImporter;
+            return importer != null && importer.textureShape == TextureImporterShape.TextureCube;
+        }
+
         public static bool IsInsideAssets(string path)
         {
             path = NormalizeAssetPath(path);
@@ -937,6 +956,7 @@ namespace KaleidoVR.EditorTools
                 "Texture3D" => "Texture2D",
                 "RenderTexture" => "Texture2D",
                 "MovieTexture" => "Texture2D",
+                "CubemapArray" => "Cubemap",
                 "RuntimeAnimatorController" => "AnimatorController",
                 _ => typeName
             };
