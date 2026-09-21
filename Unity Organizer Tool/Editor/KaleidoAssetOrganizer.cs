@@ -1131,7 +1131,7 @@ namespace KaleidoVR.EditorTools
                 AssetDatabase.Refresh();
 
                 // Unlock copied Poiyomi materials before remapping so texture slots can
-                // follow the new files. Re-lock every material we unlocked after organize.
+                // follow the new files. Lock every new Poiyomi material after organize.
                 UnlockPoiyomiMaterialsAtPaths(copiedAssetsMap.Values, poiyomiUnlockedToRelock, logEntries);
 
                 // Copy and Move both land as new-GUID files. Remap those copies onto each other
@@ -1263,10 +1263,6 @@ namespace KaleidoVR.EditorTools
                 RemoveEmptyOutputFolders(window.outputDirectory, logEntries);
                 AssetDatabase.SaveAssets();
                 AssetDatabase.Refresh();
-                if (RelockPoiyomiMaterials(poiyomiUnlockedToRelock, logEntries))
-                {
-                    poiyomiUnlockedToRelock.Clear();
-                }
                 RevealOutputDirectory(window.outputDirectory);
 
                 if (copied == 0 && moved == 0)
@@ -1285,6 +1281,7 @@ namespace KaleidoVR.EditorTools
             finally
             {
                 KaleidoAssetOrganizerHelpers.ActiveFolderLayout = null;
+                LockCopiedPoiyomiMaterials(copiedDestinations, logEntries);
                 if (poiyomiUnlockedToRelock.Count > 0)
                 {
                     RelockPoiyomiMaterials(poiyomiUnlockedToRelock, logEntries);
@@ -3132,6 +3129,26 @@ namespace KaleidoVR.EditorTools
             }
         }
 
+        private static bool LockCopiedPoiyomiMaterials(IEnumerable<string> paths, List<string> logEntries)
+        {
+            if (paths == null) return true;
+
+            List<Material> toLock = new List<Material>();
+            HashSet<string> seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (string path in paths)
+            {
+                if (string.IsNullOrEmpty(path) || !seen.Add(path)) continue;
+                Material material = AssetDatabase.LoadAssetAtPath<Material>(path);
+                if (material == null || !IsPoiyomiMaterial(material) || IsPoiyomiLocked(material)) continue;
+                toLock.Add(material);
+            }
+
+            if (toLock.Count == 0) return true;
+
+            EditorUtility.DisplayProgressBar("KaleidoVR Asset Organizer", "Locking Poiyomi materials...", 0.96f);
+            return ApplyPoiyomiLock(toLock, logEntries, "Locked Poiyomi materials after organize: ");
+        }
+
         private static bool RelockPoiyomiMaterials(HashSet<string> unlockedPaths, List<string> logEntries)
         {
             if (unlockedPaths == null || unlockedPaths.Count == 0) return true;
@@ -3140,6 +3157,11 @@ namespace KaleidoVR.EditorTools
             toLock.RemoveAll(material => material == null || IsPoiyomiLocked(material));
             if (toLock.Count == 0) return true;
 
+            return ApplyPoiyomiLock(toLock, logEntries, "Re-locked Poiyomi materials after organize: ");
+        }
+
+        private static bool ApplyPoiyomiLock(List<Material> toLock, List<string> logEntries, string successPrefix)
+        {
             if (TryLockPoiyomiMaterials(toLock))
             {
                 foreach (Material material in toLock)
@@ -3147,12 +3169,26 @@ namespace KaleidoVR.EditorTools
                     if (material != null) EditorUtility.SetDirty(material);
                 }
                 AssetDatabase.SaveAssets();
-                if (logEntries != null) logEntries.Add("Re-locked Poiyomi materials after organize: " + toLock.Count);
-                return true;
+
+                int locked = 0;
+                int stillOpen = 0;
+                foreach (Material material in toLock)
+                {
+                    if (material == null) continue;
+                    if (IsPoiyomiLocked(material)) locked++;
+                    else stillOpen++;
+                }
+
+                if (logEntries != null)
+                {
+                    if (stillOpen == 0) logEntries.Add(successPrefix + locked);
+                    else logEntries.Add(successPrefix + locked + ". Still unlocked: " + stillOpen);
+                }
+                return stillOpen == 0;
             }
 
-            if (logEntries != null) logEntries.Add("Could not re-lock Poiyomi materials.");
-            Debug.LogWarning("[KaleidoVR] Could not re-lock Poiyomi materials. Thry ShaderOptimizer was not found or lock failed.");
+            if (logEntries != null) logEntries.Add("Could not lock Poiyomi materials.");
+            Debug.LogWarning("[KaleidoVR] Could not lock Poiyomi materials. Thry ShaderOptimizer was not found or lock failed.");
             return false;
         }
 
@@ -3630,18 +3666,38 @@ namespace KaleidoVR.EditorTools
 
             if (TryUnlockPoiyomiMaterials(lockedMaterials))
             {
+                List<Material> stillLocked = new List<Material>();
                 foreach (Material material in lockedMaterials)
                 {
-                    if (material == null) continue;
+                    if (IsPoiyomiLocked(material)) stillLocked.Add(material);
+                }
+                foreach (Material material in stillLocked)
+                {
+                    TryUnlockPoiyomiMaterials(new List<Material> { material });
+                }
+
+                int unlocked = 0;
+                foreach (Material material in lockedMaterials)
+                {
+                    if (material == null || IsPoiyomiLocked(material)) continue;
                     EditorUtility.SetDirty(material);
                     string unlockedPath = AssetDatabase.GetAssetPath(material);
                     if (!string.IsNullOrEmpty(unlockedPath) && unlockedToRelock != null)
                     {
                         unlockedToRelock.Add(unlockedPath);
                     }
+                    unlocked++;
                 }
                 AssetDatabase.SaveAssets();
-                if (logEntries != null) logEntries.Add("Unlocked Poiyomi materials for remapping; they will be re-locked after organize: " + lockedMaterials.Count);
+                if (logEntries != null)
+                {
+                    logEntries.Add("Unlocked Poiyomi materials for remapping; they will be re-locked after organize: " + unlocked);
+                    int leftoverLocked = lockedMaterials.Count - unlocked;
+                    if (leftoverLocked > 0)
+                    {
+                        logEntries.Add("Could not unlock " + leftoverLocked + " Poiyomi material(s) before remapping. Those copies stay locked.");
+                    }
+                }
                 return;
             }
 
@@ -3664,15 +3720,13 @@ namespace KaleidoVR.EditorTools
                 MethodInfo unlockMaterials = FindUnlockMethod(optimizerType, "UnlockMaterials");
                 if (unlockMaterials != null)
                 {
-                    InvokeThryUnlock(unlockMaterials, materials);
-                    return true;
+                    return InvokeThryUnlock(unlockMaterials, materials);
                 }
 
                 MethodInfo setLocked = FindUnlockMethod(optimizerType, "SetLockedForAllMaterials");
                 if (setLocked != null)
                 {
-                    InvokeThrySetLocked(setLocked, materials, 0);
-                    return true;
+                    return InvokeThrySetLocked(setLocked, materials, 0);
                 }
             }
             catch (Exception ex)
@@ -3696,15 +3750,13 @@ namespace KaleidoVR.EditorTools
                 MethodInfo lockMaterials = FindUnlockMethod(optimizerType, "LockMaterials");
                 if (lockMaterials != null)
                 {
-                    InvokeThryUnlock(lockMaterials, materials);
-                    return true;
+                    return InvokeThryUnlock(lockMaterials, materials);
                 }
 
                 MethodInfo setLocked = FindUnlockMethod(optimizerType, "SetLockedForAllMaterials");
                 if (setLocked != null)
                 {
-                    InvokeThrySetLocked(setLocked, materials, 1);
-                    return true;
+                    return InvokeThrySetLocked(setLocked, materials, 1);
                 }
             }
             catch (Exception ex)
@@ -3742,31 +3794,47 @@ namespace KaleidoVR.EditorTools
 
         private static MethodInfo FindUnlockMethod(Type optimizerType, string methodName)
         {
+            if (optimizerType == null) return null;
+
             MethodInfo[] methods = optimizerType.GetMethods(BindingFlags.Public | BindingFlags.Static);
+            MethodInfo fallback = null;
             foreach (MethodInfo method in methods)
             {
-                if (method.Name == methodName) return method;
+                if (method.Name != methodName) continue;
+                ParameterInfo[] parameters = method.GetParameters();
+                if (parameters.Length == 0) continue;
+                if (!typeof(System.Collections.IEnumerable).IsAssignableFrom(parameters[0].ParameterType)
+                    || parameters[0].ParameterType == typeof(string))
+                {
+                    continue;
+                }
+                if (parameters.Length >= 2 && parameters[1].ParameterType.IsEnum) return method;
+                if (fallback == null) fallback = method;
             }
-            return null;
+            return fallback;
         }
 
-        private static void InvokeThryUnlock(MethodInfo method, List<Material> materials)
+        private static bool InvokeThryUnlock(MethodInfo method, List<Material> materials)
         {
             ParameterInfo[] parameters = method.GetParameters();
-            if (parameters.Length == 0) return;
+            if (parameters.Length == 0) return false;
+
+            object result;
             if (parameters.Length == 1)
             {
-                method.Invoke(null, new object[] { materials });
-                return;
+                result = method.Invoke(null, new object[] { materials });
             }
-
-            object progressArg = parameters[1].ParameterType.IsEnum
-                ? Enum.ToObject(parameters[1].ParameterType, 0)
-                : false;
-            method.Invoke(null, new object[] { materials, progressArg });
+            else
+            {
+                object progressArg = parameters[1].ParameterType.IsEnum
+                    ? Enum.ToObject(parameters[1].ParameterType, 0)
+                    : false;
+                result = method.Invoke(null, new object[] { materials, progressArg });
+            }
+            return !(result is bool success) || success;
         }
 
-        private static void InvokeThrySetLocked(MethodInfo method, List<Material> materials, int lockState)
+        private static bool InvokeThrySetLocked(MethodInfo method, List<Material> materials, int lockState)
         {
             ParameterInfo[] parameters = method.GetParameters();
             object[] args = new object[parameters.Length];
@@ -3794,7 +3862,8 @@ namespace KaleidoVR.EditorTools
                     args[i] = paramType.IsValueType ? Activator.CreateInstance(paramType) : null;
                 }
             }
-            method.Invoke(null, args);
+            object result = method.Invoke(null, args);
+            return !(result is bool success) || success;
         }
 
         private static void RemapCopiedAssetReferences(Dictionary<string, string> copiedAssetsMap, HashSet<string> protectedAssetPaths)
