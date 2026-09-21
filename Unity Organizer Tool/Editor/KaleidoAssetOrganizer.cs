@@ -457,6 +457,7 @@ namespace KaleidoVR.EditorTools
         public string metallic = "Metallic";
         public string roughness = "Roughness";
         public string ao = "AO";
+        public string icons = "Icons";
         public string audio = "Audio";
         public string prefabs = "Prefabs";
         public string other = "Other";
@@ -486,6 +487,7 @@ namespace KaleidoVR.EditorTools
             metallic = "Metallic";
             roughness = "Roughness";
             ao = "AO";
+            icons = "Icons";
             audio = "Audio";
             prefabs = "Prefabs";
             other = "Other";
@@ -567,6 +569,16 @@ namespace KaleidoVR.EditorTools
             if (!string.IsNullOrEmpty(assetPath) && assetPath.EndsWith(".prefab", StringComparison.OrdinalIgnoreCase))
                 return PathForSlot(SlotPrefabs);
 
+            if (typeName == "Texture2D" && !string.IsNullOrEmpty(assetPath))
+            {
+                string normalizedPath = KaleidoAssetOrganizerHelpers.NormalizeAssetPath(assetPath);
+                if (KaleidoAssetOrganizerHelpers.ActiveMenuIconPaths != null
+                    && KaleidoAssetOrganizerHelpers.ActiveMenuIconPaths.Contains(normalizedPath))
+                {
+                    return Combine(PathForSlot(SlotTextures), Sanitize(icons, "Icons"));
+                }
+            }
+
             if (parsePoiyomi && typeName == "Texture2D" && !string.IsNullOrEmpty(assetPath))
             {
                 string lowerName = Path.GetFileNameWithoutExtension(assetPath).ToLowerInvariant();
@@ -600,6 +612,7 @@ namespace KaleidoVR.EditorTools
             metallic = EditorPrefs.GetString(prefix + "metallic", "Metallic");
             roughness = EditorPrefs.GetString(prefix + "roughness", "Roughness");
             ao = EditorPrefs.GetString(prefix + "ao", "AO");
+            icons = EditorPrefs.GetString(prefix + "icons", "Icons");
             audio = EditorPrefs.GetString(prefix + "audio", "Audio");
             prefabs = EditorPrefs.GetString(prefix + "prefabs", "Prefabs");
             other = EditorPrefs.GetString(prefix + "other", "Other");
@@ -630,6 +643,7 @@ namespace KaleidoVR.EditorTools
             EditorPrefs.SetString(prefix + "metallic", metallic);
             EditorPrefs.SetString(prefix + "roughness", roughness);
             EditorPrefs.SetString(prefix + "ao", ao);
+            EditorPrefs.SetString(prefix + "icons", icons);
             EditorPrefs.SetString(prefix + "audio", audio);
             EditorPrefs.SetString(prefix + "prefabs", prefabs);
             EditorPrefs.SetString(prefix + "other", other);
@@ -944,6 +958,7 @@ namespace KaleidoVR.EditorTools
         }
 
         public static KaleidoOrganizerFolderLayout ActiveFolderLayout;
+        public static HashSet<string> ActiveMenuIconPaths;
 
         public static string GetTargetFolder(string typeName, string assetPath = "", bool parsePoiyomi = false)
         {
@@ -1024,6 +1039,11 @@ namespace KaleidoVR.EditorTools
 
                 int copied = 0, moved = 0, ignored = 0;
                 HashSet<string> projectAssetPaths = CollectProjectAssetPaths(window.objectsToOrganize, window.ignoreList, ignoredHierarchy, logEntries);
+                KaleidoAssetOrganizerHelpers.ActiveMenuIconPaths = CollectMenuIconPaths(projectAssetPaths);
+                if (KaleidoAssetOrganizerHelpers.ActiveMenuIconPaths.Count > 0)
+                {
+                    logEntries.Add("VRChat menu icons: " + KaleidoAssetOrganizerHelpers.ActiveMenuIconPaths.Count);
+                }
 
                 if (projectAssetPaths.Count == 0)
                 {
@@ -1281,6 +1301,7 @@ namespace KaleidoVR.EditorTools
             finally
             {
                 KaleidoAssetOrganizerHelpers.ActiveFolderLayout = null;
+                KaleidoAssetOrganizerHelpers.ActiveMenuIconPaths = null;
                 LockCopiedPoiyomiMaterials(copiedDestinations, logEntries);
                 if (poiyomiUnlockedToRelock.Count > 0)
                 {
@@ -1639,6 +1660,72 @@ namespace KaleidoVR.EditorTools
             PruneAssetsUniqueToIgnoredHierarchy(assetPaths, selected, ignoredHierarchy, ignoreList, logEntries);
             logEntries.Add("Project assets resolved: " + assetPaths.Count);
             return assetPaths;
+        }
+
+        private static HashSet<string> CollectMenuIconPaths(IEnumerable<string> assetPaths)
+        {
+            HashSet<string> icons = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (assetPaths == null) return icons;
+
+            Type menuType = FindTypeByFullName("VRC.SDK3.Avatars.ScriptableObjects.VRCExpressionsMenu");
+            Queue<string> menusToWalk = new Queue<string>();
+            HashSet<string> walked = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (string path in assetPaths)
+            {
+                if (IsExpressionsMenuPath(path, menuType))
+                    menusToWalk.Enqueue(KaleidoAssetOrganizerHelpers.NormalizeAssetPath(path));
+            }
+
+            while (menusToWalk.Count > 0)
+            {
+                string menuPath = menusToWalk.Dequeue();
+                if (string.IsNullOrEmpty(menuPath) || !walked.Add(menuPath)) continue;
+                if (KaleidoAssetOrganizerHelpers.ShouldIgnoreAsset(menuPath)) continue;
+
+                UnityEngine.Object menu = AssetDatabase.LoadMainAssetAtPath(menuPath);
+                if (menu == null) continue;
+
+                SerializedObject serializedMenu = new SerializedObject(menu);
+                SerializedProperty controls = serializedMenu.FindProperty("controls");
+                if (controls == null || !controls.isArray) continue;
+
+                for (int i = 0; i < controls.arraySize; i++)
+                {
+                    SerializedProperty control = controls.GetArrayElementAtIndex(i);
+                    if (control == null) continue;
+
+                    SerializedProperty iconProp = control.FindPropertyRelative("icon");
+                    if (iconProp != null && iconProp.propertyType == SerializedPropertyType.ObjectReference
+                        && iconProp.objectReferenceValue != null)
+                    {
+                        string iconPath = KaleidoAssetOrganizerHelpers.NormalizeAssetPath(
+                            AssetDatabase.GetAssetPath(iconProp.objectReferenceValue));
+                        if (!string.IsNullOrEmpty(iconPath) && !KaleidoAssetOrganizerHelpers.ShouldIgnoreAsset(iconPath))
+                            icons.Add(iconPath);
+                    }
+
+                    SerializedProperty subMenuProp = control.FindPropertyRelative("subMenu");
+                    if (subMenuProp != null && subMenuProp.objectReferenceValue != null)
+                    {
+                        string subPath = KaleidoAssetOrganizerHelpers.NormalizeAssetPath(
+                            AssetDatabase.GetAssetPath(subMenuProp.objectReferenceValue));
+                        if (!string.IsNullOrEmpty(subPath))
+                            menusToWalk.Enqueue(subPath);
+                    }
+                }
+            }
+
+            return icons;
+        }
+
+        private static bool IsExpressionsMenuPath(string path, Type menuType)
+        {
+            if (string.IsNullOrEmpty(path)) return false;
+            UnityEngine.Object main = AssetDatabase.LoadMainAssetAtPath(path);
+            if (main == null) return false;
+            if (menuType != null && menuType.IsAssignableFrom(main.GetType())) return true;
+            return KaleidoAssetOrganizerHelpers.ResolveExportTypeName(path, main, main) == "VRCExpressionsMenu";
         }
 
         private static bool IsSelectionAlreadyInOutput(List<UnityEngine.Object> selected, string outputDirectory)
