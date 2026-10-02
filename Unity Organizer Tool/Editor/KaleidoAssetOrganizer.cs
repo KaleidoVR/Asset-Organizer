@@ -1013,6 +1013,7 @@ namespace KaleidoVR.EditorTools
             HashSet<int> protectedInstanceIds = BuildProtectedInstanceIds(window.objectsToOrganize);
             HashSet<string> protectedAssetPaths = BuildProtectedAssetPaths(window.objectsToOrganize);
             HashSet<string> poiyomiUnlockedToRelock = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            s_thryOptimizerLogged = false;
 
             try
             {
@@ -3335,6 +3336,7 @@ namespace KaleidoVR.EditorTools
 
             if (toLock.Count == 0) return true;
 
+            LogThryOptimizer(logEntries);
             EditorUtility.DisplayProgressBar("KaleidoVR Asset Organizer", "Locking Poiyomi materials...", 0.96f);
             return ApplyPoiyomiLock(toLock, logEntries, "Locked Poiyomi materials after organize: ");
         }
@@ -3347,6 +3349,7 @@ namespace KaleidoVR.EditorTools
             toLock.RemoveAll(material => material == null || IsPoiyomiLocked(material));
             if (toLock.Count == 0) return true;
 
+            LogThryOptimizer(logEntries);
             return ApplyPoiyomiLock(toLock, logEntries, "Re-locked Poiyomi materials after organize: ");
         }
 
@@ -3963,6 +3966,8 @@ namespace KaleidoVR.EditorTools
 
             if (lockedMaterials.Count == 0) return;
 
+            LogThryOptimizer(logEntries);
+            EditorUtility.DisplayProgressBar("KaleidoVR Asset Organizer", "Unlocking Poiyomi materials...", 0.55f);
             if (TryUnlockPoiyomiMaterials(lockedMaterials))
             {
                 List<Material> stillLocked = new List<Material>();
@@ -4069,6 +4074,23 @@ namespace KaleidoVR.EditorTools
 
         private static Type s_thryOptimizerType;
         private static bool s_thryOptimizerSearched;
+        private static bool s_thryOptimizerLogged;
+
+        private static void LogThryOptimizer(List<string> logEntries)
+        {
+            if (s_thryOptimizerLogged) return;
+            s_thryOptimizerLogged = true;
+            Type optimizerType = FindThryShaderOptimizerType();
+            if (optimizerType == null)
+            {
+                if (logEntries != null) logEntries.Add("Thry ShaderOptimizer was not found. Locked Poiyomi materials stay locked.");
+                return;
+            }
+            if (logEntries != null)
+            {
+                logEntries.Add("Using Thry ShaderOptimizer: " + optimizerType.FullName + " (" + optimizerType.Assembly.GetName().Name + ")");
+            }
+        }
 
         private static Type FindThryShaderOptimizerType()
         {
