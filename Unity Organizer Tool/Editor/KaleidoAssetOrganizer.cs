@@ -601,13 +601,20 @@ namespace KaleidoVR.EditorTools
                 {
                     return Combine(PathForSlot(SlotTextures), Sanitize(cubeMaps, "CubeMaps"));
                 }
+                if (typeName == "Texture2D"
+                    && (KaleidoAssetOrganizerHelpers.IsNormalTexturePath(normalizedPath)
+                        || (KaleidoAssetOrganizerHelpers.ActiveNormalTexturePaths != null
+                            && KaleidoAssetOrganizerHelpers.ActiveNormalTexturePaths.Contains(normalizedPath))))
+                {
+                    return Combine(PathForSlot(SlotTextures), Sanitize(normals, "Normals"));
+                }
             }
 
             if (parsePoiyomi && typeName == "Texture2D" && !string.IsNullOrEmpty(assetPath))
             {
                 string lowerName = Path.GetFileNameWithoutExtension(assetPath).ToLowerInvariant();
                 string texRoot = PathForSlot(SlotTextures);
-                if (lowerName.Contains("normal") || lowerName.EndsWith("_n") || lowerName.Contains("nrm"))
+                if (KaleidoAssetOrganizerHelpers.IsNormalTextureFileName(lowerName))
                     return Combine(texRoot, Sanitize(normals, "Normals"));
                 if (lowerName.Contains("emission") || lowerName.Contains("emissive") || lowerName.EndsWith("_e"))
                     return Combine(texRoot, Sanitize(emissions, "Emissions"));
@@ -615,7 +622,7 @@ namespace KaleidoVR.EditorTools
                     return Combine(texRoot, Sanitize(metallic, "Metallic"));
                 if (lowerName.Contains("roughness") || lowerName.Contains("rough") || lowerName.EndsWith("_r"))
                     return Combine(texRoot, Sanitize(roughness, "Roughness"));
-                if (lowerName.Contains("ao") || lowerName.Contains("occlusion"))
+                if (KaleidoAssetOrganizerHelpers.IsAoTextureFileName(lowerName))
                     return Combine(texRoot, Sanitize(ao, "AO"));
             }
 
@@ -868,6 +875,58 @@ namespace KaleidoVR.EditorTools
             return importer != null && importer.textureShape == TextureImporterShape.TextureCube;
         }
 
+        public static bool IsNormalTexturePath(string path)
+        {
+            path = NormalizeAssetPath(path);
+            if (string.IsNullOrEmpty(path)) return false;
+            TextureImporter importer = AssetImporter.GetAtPath(path) as TextureImporter;
+            return importer != null && importer.textureType == TextureImporterType.NormalMap;
+        }
+
+        public static bool IsNormalTextureFileName(string fileName)
+        {
+            if (string.IsNullOrEmpty(fileName)) return false;
+            if (fileName.IndexOf("normal", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (fileName.EndsWith("_n", StringComparison.OrdinalIgnoreCase)) return true;
+            return TextureFileNameHasToken(fileName, "nrm", "nrml", "norm", "nml", "bump", "nor");
+        }
+
+        public static bool IsAoTextureFileName(string fileName)
+        {
+            if (string.IsNullOrEmpty(fileName)) return false;
+            if (fileName.IndexOf("occlusion", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            return TextureFileNameHasToken(fileName, "ao", "occ");
+        }
+
+        public static bool TextureFileNameHasToken(string fileName, params string[] tokens)
+        {
+            if (string.IsNullOrEmpty(fileName) || tokens == null || tokens.Length == 0) return false;
+            string[] parts = fileName.ToLowerInvariant().Split(new[] { '_', '-', '.', ' ', '(', ')' }, StringSplitOptions.RemoveEmptyEntries);
+            for (int i = 0; i < parts.Length; i++)
+            {
+                string part = parts[i];
+                for (int t = 0; t < tokens.Length; t++)
+                {
+                    string token = tokens[t];
+                    if (string.IsNullOrEmpty(token)) continue;
+                    if (part == token) return true;
+                    if (token == "ao" && part.StartsWith("ao", StringComparison.Ordinal) && AoTokenHasOnlyDigitsAfter(part))
+                        return true;
+                }
+            }
+            return false;
+        }
+
+        static bool AoTokenHasOnlyDigitsAfter(string part)
+        {
+            if (part.Length <= 2) return part == "ao";
+            for (int i = 2; i < part.Length; i++)
+            {
+                if (part[i] < '0' || part[i] > '9') return false;
+            }
+            return true;
+        }
+
         public static bool IsInsideAssets(string path)
         {
             path = NormalizeAssetPath(path);
@@ -1000,6 +1059,7 @@ namespace KaleidoVR.EditorTools
         public static HashSet<string> ActiveMenuIconPaths;
         public static HashSet<string> ActiveMaskTexturePaths;
         public static HashSet<string> ActiveMatcapTexturePaths;
+        public static HashSet<string> ActiveNormalTexturePaths;
 
         public static string GetTargetFolder(string typeName, string assetPath = "", bool parsePoiyomi = false)
         {
@@ -1095,6 +1155,11 @@ namespace KaleidoVR.EditorTools
                 if (KaleidoAssetOrganizerHelpers.ActiveMatcapTexturePaths.Count > 0)
                 {
                     logEntries.Add("LilToon / Poiyomi matcap textures: " + KaleidoAssetOrganizerHelpers.ActiveMatcapTexturePaths.Count);
+                }
+                KaleidoAssetOrganizerHelpers.ActiveNormalTexturePaths = CollectNormalTexturePaths(projectAssetPaths);
+                if (KaleidoAssetOrganizerHelpers.ActiveNormalTexturePaths.Count > 0)
+                {
+                    logEntries.Add("LilToon / Poiyomi normal textures: " + KaleidoAssetOrganizerHelpers.ActiveNormalTexturePaths.Count);
                 }
 
                 if (projectAssetPaths.Count == 0)
@@ -1356,6 +1421,7 @@ namespace KaleidoVR.EditorTools
                 KaleidoAssetOrganizerHelpers.ActiveMenuIconPaths = null;
                 KaleidoAssetOrganizerHelpers.ActiveMaskTexturePaths = null;
                 KaleidoAssetOrganizerHelpers.ActiveMatcapTexturePaths = null;
+                KaleidoAssetOrganizerHelpers.ActiveNormalTexturePaths = null;
                 LockCopiedPoiyomiMaterials(copiedDestinations, logEntries);
                 if (poiyomiUnlockedToRelock.Count > 0)
                 {
@@ -1887,6 +1953,60 @@ namespace KaleidoVR.EditorTools
                 return false;
             }
             return propertyName.IndexOf("Mask", StringComparison.OrdinalIgnoreCase) < 0;
+        }
+
+        private static HashSet<string> CollectNormalTexturePaths(IEnumerable<string> assetPaths)
+        {
+            HashSet<string> normals = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (assetPaths == null) return normals;
+
+            foreach (string path in assetPaths)
+            {
+                if (string.IsNullOrEmpty(path) || KaleidoAssetOrganizerHelpers.ShouldIgnoreAsset(path)) continue;
+                Material material = AssetDatabase.LoadAssetAtPath<Material>(path);
+                if (material == null || !IsLilToonOrPoiyomiMaterial(material)) continue;
+
+                string[] propertyNames;
+                try
+                {
+                    propertyNames = material.GetTexturePropertyNames();
+                }
+                catch (Exception)
+                {
+                    continue;
+                }
+                if (propertyNames == null) continue;
+
+                foreach (string propertyName in propertyNames)
+                {
+                    if (!IsNormalTextureProperty(propertyName)) continue;
+
+                    Texture texture;
+                    try
+                    {
+                        texture = material.GetTexture(propertyName);
+                    }
+                    catch (Exception)
+                    {
+                        continue;
+                    }
+                    if (texture == null) continue;
+
+                    string texturePath = KaleidoAssetOrganizerHelpers.NormalizeAssetPath(AssetDatabase.GetAssetPath(texture));
+                    if (!string.IsNullOrEmpty(texturePath) && !KaleidoAssetOrganizerHelpers.ShouldIgnoreAsset(texturePath))
+                        normals.Add(texturePath);
+                }
+            }
+
+            return normals;
+        }
+
+        private static bool IsNormalTextureProperty(string propertyName)
+        {
+            if (string.IsNullOrEmpty(propertyName)) return false;
+            if (propertyName.IndexOf("Mask", StringComparison.OrdinalIgnoreCase) >= 0) return false;
+            return propertyName.IndexOf("Normal", StringComparison.OrdinalIgnoreCase) >= 0
+                || propertyName.IndexOf("Bump", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         private static bool IsLilToonOrPoiyomiMaterial(Material material)
