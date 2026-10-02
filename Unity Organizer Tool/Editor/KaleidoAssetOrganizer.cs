@@ -3817,7 +3817,7 @@ namespace KaleidoVR.EditorTools
         {
             if (material == null) return false;
             if (IsPoiyomiLocked(material)) return true;
-            if (material.HasProperty("_ShaderOptimizerEnabled")) return true;
+            if (HasThryOptimizerProperty(material)) return true;
 
             string shaderName = material.shader != null ? material.shader.name : string.Empty;
             return !string.IsNullOrEmpty(shaderName)
@@ -3827,16 +3827,125 @@ namespace KaleidoVR.EditorTools
         private static bool IsPoiyomiLocked(Material material)
         {
             if (material == null) return false;
-            if (material.HasProperty("_ShaderOptimizerEnabled") && material.GetFloat("_ShaderOptimizerEnabled") > 0.5f)
-            {
-                return true;
-            }
+            if (GetThryOptimizerLockValue(material) > 0.5f) return true;
+            if (TryThryMaterialIsLocked(material, out bool thryLocked) && thryLocked) return true;
 
             string shaderName = material.shader != null ? material.shader.name : string.Empty;
             return !string.IsNullOrEmpty(shaderName)
                 && shaderName.IndexOf("Locked", StringComparison.OrdinalIgnoreCase) >= 0
                 && (shaderName.IndexOf("Poiyomi", StringComparison.OrdinalIgnoreCase) >= 0
                     || shaderName.IndexOf("Hidden", StringComparison.OrdinalIgnoreCase) >= 0);
+        }
+
+        private static bool HasThryOptimizerProperty(Material material)
+        {
+            return !string.IsNullOrEmpty(FindThryOptimizerPropertyName(material));
+        }
+
+        private static float GetThryOptimizerLockValue(Material material)
+        {
+            string propertyName = FindThryOptimizerPropertyName(material);
+            if (string.IsNullOrEmpty(propertyName)) return 0f;
+            try
+            {
+                return material.GetFloat(propertyName);
+            }
+            catch (Exception)
+            {
+                return 0f;
+            }
+        }
+
+        private static string FindThryOptimizerPropertyName(Material material)
+        {
+            if (material == null) return null;
+            if (material.HasProperty("_ShaderOptimizerEnabled")) return "_ShaderOptimizerEnabled";
+
+            Shader shader = material.shader;
+            if (shader == null) return null;
+
+            string fromThry = TryThryGetOptimizerPropertyName(shader);
+            if (!string.IsNullOrEmpty(fromThry) && material.HasProperty(fromThry)) return fromThry;
+
+            try
+            {
+                int count = shader.GetPropertyCount();
+                for (int i = 0; i < count; i++)
+                {
+                    ShaderPropertyType propertyType = shader.GetPropertyType(i);
+                    if (propertyType != ShaderPropertyType.Float && propertyType != ShaderPropertyType.Range)
+                        continue;
+                    string propertyName = shader.GetPropertyName(i);
+                    if (!string.IsNullOrEmpty(propertyName)
+                        && propertyName.IndexOf("ShaderOptimizer", StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        return propertyName;
+                    }
+                }
+            }
+            catch (Exception)
+            {
+            }
+            return fromThry;
+        }
+
+        private static string TryThryGetOptimizerPropertyName(Shader shader)
+        {
+            if (shader == null) return null;
+            Type optimizerType = FindThryShaderOptimizerType();
+            if (optimizerType == null) return null;
+            MethodInfo method = optimizerType.GetMethod("GetOptimizerPropertyName", BindingFlags.Public | BindingFlags.Static, null, new[] { typeof(Shader) }, null);
+            if (method == null) return null;
+            try
+            {
+                return method.Invoke(null, new object[] { shader }) as string;
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+        }
+
+        private static bool TryThryMaterialIsLocked(Material material, out bool isLocked)
+        {
+            isLocked = false;
+            if (material == null) return false;
+
+            Type optimizerType = FindThryShaderOptimizerType();
+            if (optimizerType == null) return false;
+
+            MethodInfo materialLocked = optimizerType.GetMethod("IsMaterialLocked", BindingFlags.Public | BindingFlags.Static, null, new[] { typeof(Material) }, null);
+            MethodInfo shaderLocked = optimizerType.GetMethod("IsShaderLocked", BindingFlags.Public | BindingFlags.Static, null, new[] { typeof(Shader) }, null);
+            MethodInfo isLockedMethod = optimizerType.GetMethod("IsLocked", BindingFlags.Public | BindingFlags.Static, null, new[] { typeof(Material) }, null)
+                ?? optimizerType.GetMethod("IsLocked", BindingFlags.Public | BindingFlags.Static, null, new[] { typeof(Shader) }, null);
+
+            try
+            {
+                object result = null;
+                if (materialLocked != null)
+                {
+                    result = materialLocked.Invoke(null, new object[] { material });
+                }
+                else if (shaderLocked != null && material.shader != null)
+                {
+                    result = shaderLocked.Invoke(null, new object[] { material.shader });
+                }
+                else if (isLockedMethod != null)
+                {
+                    result = isLockedMethod.GetParameters()[0].ParameterType == typeof(Material)
+                        ? isLockedMethod.Invoke(null, new object[] { material })
+                        : isLockedMethod.Invoke(null, new object[] { material.shader });
+                }
+                if (result is bool locked)
+                {
+                    isLocked = locked;
+                    return true;
+                }
+            }
+            catch (Exception)
+            {
+            }
+            return false;
         }
 
         private static void UnlockPoiyomiMaterialsAtPaths(IEnumerable<string> paths, HashSet<string> unlockedToRelock, List<string> logEntries)
@@ -3958,14 +4067,29 @@ namespace KaleidoVR.EditorTools
             return false;
         }
 
+        private static Type s_thryOptimizerType;
+        private static bool s_thryOptimizerSearched;
+
         private static Type FindThryShaderOptimizerType()
         {
-            string[] typeNames = { "Thry.ThryEditor.ShaderOptimizer", "Thry.ShaderOptimizer" };
+            if (s_thryOptimizerSearched) return s_thryOptimizerType;
+            s_thryOptimizerSearched = true;
+
+            string[] typeNames =
+            {
+                "Thry.ThryEditor.ShaderOptimizer",
+                "Thry.ShaderOptimizer",
+                "ThryEditor.ShaderOptimizer"
+            };
             Assembly[] assemblies = AppDomain.CurrentDomain.GetAssemblies();
             foreach (string typeName in typeNames)
             {
                 Type found = Type.GetType(typeName);
-                if (found != null) return found;
+                if (found != null)
+                {
+                    s_thryOptimizerType = found;
+                    return found;
+                }
                 foreach (Assembly assembly in assemblies)
                 {
                     try
@@ -3976,9 +4100,55 @@ namespace KaleidoVR.EditorTools
                     {
                         found = null;
                     }
-                    if (found != null) return found;
+                    if (found != null)
+                    {
+                        s_thryOptimizerType = found;
+                        return found;
+                    }
                 }
             }
+
+            foreach (Assembly assembly in assemblies)
+            {
+                string assemblyName;
+                try
+                {
+                    assemblyName = assembly.GetName().Name;
+                }
+                catch (Exception)
+                {
+                    continue;
+                }
+                if (string.IsNullOrEmpty(assemblyName)
+                    || (assemblyName.IndexOf("Thry", StringComparison.OrdinalIgnoreCase) < 0
+                        && assemblyName.IndexOf("Poiyomi", StringComparison.OrdinalIgnoreCase) < 0))
+                {
+                    continue;
+                }
+
+                Type[] types;
+                try
+                {
+                    types = assembly.GetTypes();
+                }
+                catch (ReflectionTypeLoadException ex)
+                {
+                    types = ex.Types;
+                }
+                catch (Exception)
+                {
+                    continue;
+                }
+                if (types == null) continue;
+
+                foreach (Type type in types)
+                {
+                    if (type == null || type.Name != "ShaderOptimizer" || !type.IsClass) continue;
+                    s_thryOptimizerType = type;
+                    return type;
+                }
+            }
+
             return null;
         }
 
@@ -4006,27 +4176,19 @@ namespace KaleidoVR.EditorTools
 
         private static bool InvokeThryUnlock(MethodInfo method, List<Material> materials)
         {
-            ParameterInfo[] parameters = method.GetParameters();
-            if (parameters.Length == 0) return false;
-
-            object result;
-            if (parameters.Length == 1)
-            {
-                result = method.Invoke(null, new object[] { materials });
-            }
-            else
-            {
-                object progressArg = parameters[1].ParameterType.IsEnum
-                    ? Enum.ToObject(parameters[1].ParameterType, 0)
-                    : false;
-                result = method.Invoke(null, new object[] { materials, progressArg });
-            }
-            return !(result is bool success) || success;
+            return InvokeThryMaterialMethod(method, materials, 0);
         }
 
         private static bool InvokeThrySetLocked(MethodInfo method, List<Material> materials, int lockState)
         {
+            return InvokeThryMaterialMethod(method, materials, lockState);
+        }
+
+        private static bool InvokeThryMaterialMethod(MethodInfo method, List<Material> materials, int lockState)
+        {
             ParameterInfo[] parameters = method.GetParameters();
+            if (parameters.Length == 0) return false;
+
             object[] args = new object[parameters.Length];
             for (int i = 0; i < parameters.Length; i++)
             {
@@ -4045,15 +4207,37 @@ namespace KaleidoVR.EditorTools
                 }
                 else if (paramType.IsEnum)
                 {
-                    args[i] = Enum.ToObject(paramType, 0);
+                    args[i] = GetThryProgressBar(paramType);
                 }
                 else
                 {
                     args[i] = paramType.IsValueType ? Activator.CreateInstance(paramType) : null;
                 }
             }
+
             object result = method.Invoke(null, args);
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
             return !(result is bool success) || success;
+        }
+
+        private static object GetThryProgressBar(Type enumType)
+        {
+            try
+            {
+                return Enum.Parse(enumType, "Uncancellable");
+            }
+            catch (Exception)
+            {
+            }
+            try
+            {
+                return Enum.ToObject(enumType, 2);
+            }
+            catch (Exception)
+            {
+                return Enum.ToObject(enumType, 0);
+            }
         }
 
         private static void RemapCopiedAssetReferences(Dictionary<string, string> copiedAssetsMap, HashSet<string> protectedAssetPaths)
