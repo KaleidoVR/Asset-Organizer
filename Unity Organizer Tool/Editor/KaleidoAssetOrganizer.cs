@@ -459,6 +459,7 @@ namespace KaleidoVR.EditorTools
         public string ao = "AO";
         public string icons = "Icons";
         public string textureMasks = "Masks";
+        public string matCaps = "MatCaps";
         public string cubeMaps = "CubeMaps";
         public string audio = "Audio";
         public string prefabs = "Prefabs";
@@ -491,6 +492,7 @@ namespace KaleidoVR.EditorTools
             ao = "AO";
             icons = "Icons";
             textureMasks = "Masks";
+            matCaps = "MatCaps";
             cubeMaps = "CubeMaps";
             audio = "Audio";
             prefabs = "Prefabs";
@@ -588,6 +590,12 @@ namespace KaleidoVR.EditorTools
                 {
                     return Combine(PathForSlot(SlotTextures), Sanitize(textureMasks, "Masks"));
                 }
+                if ((typeName == "Texture2D" || typeName == "Cubemap")
+                    && KaleidoAssetOrganizerHelpers.ActiveMatcapTexturePaths != null
+                    && KaleidoAssetOrganizerHelpers.ActiveMatcapTexturePaths.Contains(normalizedPath))
+                {
+                    return Combine(PathForSlot(SlotTextures), Sanitize(matCaps, "MatCaps"));
+                }
                 if (typeName == "Cubemap" || typeName == "CubemapArray"
                     || KaleidoAssetOrganizerHelpers.IsCubeTexturePath(normalizedPath))
                 {
@@ -630,6 +638,7 @@ namespace KaleidoVR.EditorTools
             ao = EditorPrefs.GetString(prefix + "ao", "AO");
             icons = EditorPrefs.GetString(prefix + "icons", "Icons");
             textureMasks = EditorPrefs.GetString(prefix + "textureMasks", "Masks");
+            matCaps = EditorPrefs.GetString(prefix + "matCaps", "MatCaps");
             cubeMaps = EditorPrefs.GetString(prefix + "cubeMaps", "CubeMaps");
             audio = EditorPrefs.GetString(prefix + "audio", "Audio");
             prefabs = EditorPrefs.GetString(prefix + "prefabs", "Prefabs");
@@ -663,6 +672,7 @@ namespace KaleidoVR.EditorTools
             EditorPrefs.SetString(prefix + "ao", ao);
             EditorPrefs.SetString(prefix + "icons", icons);
             EditorPrefs.SetString(prefix + "textureMasks", textureMasks);
+            EditorPrefs.SetString(prefix + "matCaps", matCaps);
             EditorPrefs.SetString(prefix + "cubeMaps", cubeMaps);
             EditorPrefs.SetString(prefix + "audio", audio);
             EditorPrefs.SetString(prefix + "prefabs", prefabs);
@@ -989,6 +999,7 @@ namespace KaleidoVR.EditorTools
         public static KaleidoOrganizerFolderLayout ActiveFolderLayout;
         public static HashSet<string> ActiveMenuIconPaths;
         public static HashSet<string> ActiveMaskTexturePaths;
+        public static HashSet<string> ActiveMatcapTexturePaths;
 
         public static string GetTargetFolder(string typeName, string assetPath = "", bool parsePoiyomi = false)
         {
@@ -1079,6 +1090,11 @@ namespace KaleidoVR.EditorTools
                 if (KaleidoAssetOrganizerHelpers.ActiveMaskTexturePaths.Count > 0)
                 {
                     logEntries.Add("LilToon / Poiyomi mask textures: " + KaleidoAssetOrganizerHelpers.ActiveMaskTexturePaths.Count);
+                }
+                KaleidoAssetOrganizerHelpers.ActiveMatcapTexturePaths = CollectMatcapTexturePaths(projectAssetPaths);
+                if (KaleidoAssetOrganizerHelpers.ActiveMatcapTexturePaths.Count > 0)
+                {
+                    logEntries.Add("LilToon / Poiyomi matcap textures: " + KaleidoAssetOrganizerHelpers.ActiveMatcapTexturePaths.Count);
                 }
 
                 if (projectAssetPaths.Count == 0)
@@ -1339,6 +1355,7 @@ namespace KaleidoVR.EditorTools
                 KaleidoAssetOrganizerHelpers.ActiveFolderLayout = null;
                 KaleidoAssetOrganizerHelpers.ActiveMenuIconPaths = null;
                 KaleidoAssetOrganizerHelpers.ActiveMaskTexturePaths = null;
+                KaleidoAssetOrganizerHelpers.ActiveMatcapTexturePaths = null;
                 LockCopiedPoiyomiMaterials(copiedDestinations, logEntries);
                 if (poiyomiUnlockedToRelock.Count > 0)
                 {
@@ -1813,6 +1830,63 @@ namespace KaleidoVR.EditorTools
             }
 
             return masks;
+        }
+
+        private static HashSet<string> CollectMatcapTexturePaths(IEnumerable<string> assetPaths)
+        {
+            HashSet<string> matcaps = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (assetPaths == null) return matcaps;
+
+            foreach (string path in assetPaths)
+            {
+                if (string.IsNullOrEmpty(path) || KaleidoAssetOrganizerHelpers.ShouldIgnoreAsset(path)) continue;
+                Material material = AssetDatabase.LoadAssetAtPath<Material>(path);
+                if (material == null || !IsLilToonOrPoiyomiMaterial(material)) continue;
+
+                string[] propertyNames;
+                try
+                {
+                    propertyNames = material.GetTexturePropertyNames();
+                }
+                catch (Exception)
+                {
+                    continue;
+                }
+                if (propertyNames == null) continue;
+
+                foreach (string propertyName in propertyNames)
+                {
+                    if (!IsMatcapTextureProperty(propertyName)) continue;
+
+                    Texture texture;
+                    try
+                    {
+                        texture = material.GetTexture(propertyName);
+                    }
+                    catch (Exception)
+                    {
+                        continue;
+                    }
+                    if (texture == null) continue;
+
+                    string texturePath = KaleidoAssetOrganizerHelpers.NormalizeAssetPath(AssetDatabase.GetAssetPath(texture));
+                    if (!string.IsNullOrEmpty(texturePath) && !KaleidoAssetOrganizerHelpers.ShouldIgnoreAsset(texturePath))
+                        matcaps.Add(texturePath);
+                }
+            }
+
+            return matcaps;
+        }
+
+        private static bool IsMatcapTextureProperty(string propertyName)
+        {
+            if (string.IsNullOrEmpty(propertyName)) return false;
+            if (propertyName.IndexOf("Matcap", StringComparison.OrdinalIgnoreCase) < 0
+                && propertyName.IndexOf("MatCap", StringComparison.OrdinalIgnoreCase) < 0)
+            {
+                return false;
+            }
+            return propertyName.IndexOf("Mask", StringComparison.OrdinalIgnoreCase) < 0;
         }
 
         private static bool IsLilToonOrPoiyomiMaterial(Material material)
