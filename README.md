@@ -54,7 +54,7 @@ Scripts, DLLs, shaders, and anything under `Packages/`, `Assets/Editor`, `Assets
 
 - I always write the packed prefab into `<output>/Prefabs/` and place that prefab into the scene.
 - **Rename Old / New Objects** — off by default. When on, leftover originals in the source scene get an Old suffix.
-- I sort textures into subfolders: suffix maps (normal, emission, metallic, roughness, AO), VRChat menu icons (`Icons`), LilToon and Poiyomi Mask slots (`Masks`), and cubemaps (`CubeMaps`). Menu icons win over Masks. Masks win over CubeMaps. Those win over the suffix folders.
+- I sort textures into subfolders: suffix maps (normal, emission, metallic, roughness, AO), VRChat menu icons (`Icons`), LilToon and Poiyomi Mask slots (`Masks`), LilToon and Poiyomi Matcap slots (`MatCaps`), and cubemaps (`CubeMaps`). Menu icons win over Masks. Masks win over MatCaps. MatCaps win over CubeMaps. Those win over the suffix folders. I only send a texture to AO when the name has a real AO token, not letters like ao inside another word.
 - I unlock locked Poiyomi copies first so their textures can follow the new files, then I lock every new Poiyomi material. You see Unlocking Materials and Locking Materials while that runs. You need Poiyomi/Thry in the project for that, including Poiyomi 11. LilToon materials stay as they are.
 - **Auto-Link FX & Menu** always runs on a single organized object: add or reuse a `VRCAvatarDescriptor` and assign the FX layer, expressions menu, and expression parameters.
 
@@ -68,7 +68,7 @@ Organize settings persist between sessions via `EditorPrefs`.
 
 Parents are the folders under **Output Directory**. Child rows show the full path they land in, for example `Textures/Normals` or `3.0/Animations`.
 
-Default names match the tree in **Output structure** below: Models (`FBX`), Materials, Textures (Normals, Emissions, Metallic, Roughness, AO, Icons, Masks, CubeMaps), Audio, Prefabs, Other, and the VRChat root (`3.0`) with Animations, Blend Trees, Avatar Masks, Controllers, Menus, and Parameters.
+Default names match the tree in **Output structure** below: Models (`FBX`), Materials, Textures (Normals, Emissions, Metallic, Roughness, AO, Icons, Masks, MatCaps, CubeMaps), Audio, Prefabs, Other, and the VRChat root (`3.0`) with Animations, Blend Trees, Avatar Masks, Controllers, Menus, and Parameters.
 
 ### Where each type goes
 
@@ -76,7 +76,7 @@ Each export type has a folder dropdown. That only picks the destination folder. 
 
 Shader, MonoScript, and DefaultAsset show an orange **Warning (Special use case)** because those types are special-use and default to Ignore on Organize.
 
-The packed result always lands in the Prefabs folder. Texture suffix subfolders still apply when a texture name matches normal, emission, metallic, roughness, or AO. Menu icons, Mask-slot textures, and cubemaps take their own folders first. You can rename Icons, Masks, and CubeMaps here.
+The packed result always lands in the Prefabs folder. Texture suffix subfolders still apply when a texture name matches normal, emission, metallic, roughness, or AO. Menu icons, Mask-slot textures, Matcap slots, and cubemaps take their own folders first. You can rename Icons, Masks, MatCaps, and CubeMaps here.
 
 ### These settings apply to
 
@@ -102,6 +102,7 @@ Settings (Beta) also persists via `EditorPrefs`.
 │   ├── AO/
 │   ├── Icons/
 │   ├── Masks/
+│   ├── MatCaps/
 │   └── CubeMaps/
 ├── Audio/
 ├── Prefabs/

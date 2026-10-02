@@ -1,5 +1,10 @@
 What's new
 
+1.2.9
+I put LilToon and Poiyomi Matcap slots in Textures/MatCaps. A file named like matcap stays in Textures/ if it is not in a slot.
+I keep names like SUYAO out of AO. Unity Normal maps and LilToon/Poiyomi Normal/Bump slots go to Textures/Normals. AO only matches a real AO token, like _ao or occlusion.
+UI — Settings (Beta): MatCaps sits under Textures. You can rename it.
+
 1.2.8
 I unlock locked Poiyomi copies first so their textures can follow the new files, then I lock every new Poiyomi material. That still works after Poiyomi 11, when Thry is its own package.
 UI — Organize: Unlocking Materials and Locking Materials show while that runs.
