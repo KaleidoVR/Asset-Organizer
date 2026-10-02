@@ -1,5 +1,9 @@
 What's new
 
+1.2.8
+I unlock locked Poiyomi copies first so their textures can follow the new files, then I lock every new Poiyomi material. That still works after Poiyomi 11, when Thry is its own package.
+UI — Organize: Unlocking Materials and Locking Materials show while that runs.
+
 1.2.7
 I lock every new Poiyomi material after Organize. I unlock locked copies first so their textures can follow the new files.
 Organize puts VRChat menu icons in Textures/Icons. LilToon and Poiyomi Mask slots go to Textures/Masks. Cubemaps go to Textures/CubeMaps.
