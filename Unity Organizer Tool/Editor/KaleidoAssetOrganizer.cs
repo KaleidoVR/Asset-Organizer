@@ -22,7 +22,7 @@ namespace KaleidoVR.EditorTools
     public class KaleidoAssetOrganizer : EditorWindow
     {
         // Each digit rolls 0-9. After 1.0.9 comes 1.1.0; after 1.9.9 comes 2.0.0.
-        public static readonly string VERSION = "1.2.10";
+        public static readonly string VERSION = "1.2.11";
         public static string ReleaseName { get { return "Asset Organizer " + VERSION; } }
         public const string LOGO_FILE_NAME = "Kali_Logo.png";
         public const string FALLBACK_ICON_PATH = "Assets/KaleidoVR/Editor/Icons/Kali_Logo.png";
@@ -1224,12 +1224,12 @@ namespace KaleidoVR.EditorTools
                     // Copy it to a unique path and never delete it, so this run stays isolated.
                     if (KaleidoAssetOrganizerHelpers.IsSameOrInside(path, window.outputDirectory))
                     {
-                        if (!TryCopyOrganizedAsset(path, window.outputDirectory, typeName, window.autoParsePoiyomi, copiedAssetsMap, copiedDestinations, movedAssetsMap, processedPaths, logEntries, "Isolated copy from existing organized file"))
+                        if (!TryCopyOrganizedAsset(path, window.outputDirectory, typeName, window.autoParsePoiyomi, copiedAssetsMap, copiedDestinations, movedAssetsMap, processedPaths, logEntries, "Isolated copy from existing organized file", out bool reusedOrganized))
                         {
                             movedAssetsMap[path] = path;
                             logEntries.Add("Already in output: " + path);
                         }
-                        else
+                        else if (!reusedOrganized)
                         {
                             copied++;
                         }
@@ -1248,9 +1248,14 @@ namespace KaleidoVR.EditorTools
 
                         // Both modes copy so the output always has new GUIDs. Move deletes
                         // the source files later, after remaining references are retargeted.
-                        if (!TryCopyOrganizedAsset(path, window.outputDirectory, typeName, window.autoParsePoiyomi, copiedAssetsMap, copiedDestinations, movedAssetsMap, processedPaths, logEntries, action == "Move" ? "Moved" : "Copied"))
+                        if (!TryCopyOrganizedAsset(path, window.outputDirectory, typeName, window.autoParsePoiyomi, copiedAssetsMap, copiedDestinations, movedAssetsMap, processedPaths, logEntries, action == "Move" ? "Moved" : "Copied", out bool reusedCopy))
                         {
                             Debug.LogWarning("[KaleidoVR] " + action + " failed for " + path);
+                            continue;
+                        }
+
+                        if (reusedCopy)
+                        {
                             continue;
                         }
 
@@ -1456,8 +1461,10 @@ namespace KaleidoVR.EditorTools
             Dictionary<string, string> movedAssetsMap,
             HashSet<string> processedPaths,
             List<string> logEntries,
-            string logPrefix)
+            string logPrefix,
+            out bool reused)
         {
+            reused = false;
             string targetFolder = KaleidoAssetOrganizerHelpers.GetTargetFolder(
                 KaleidoAssetOrganizerHelpers.AliasOrganizeType(typeName), path, parsePoiyomi);
             string localAssetFolder = $"{outputDirectory}/{targetFolder}".Replace("\\", "/");
@@ -1468,7 +1475,18 @@ namespace KaleidoVR.EditorTools
                 return false;
             }
 
-            string targetPath = $"{outputDirectory}/{targetFolder}/{Path.GetFileName(path)}".Replace("\\", "/");
+            string targetPath = KaleidoAssetOrganizerHelpers.NormalizeAssetPath(
+                $"{outputDirectory}/{targetFolder}/{Path.GetFileName(path)}");
+            if (CanShareCopiedFile(path) && copiedDestinations != null && copiedDestinations.Contains(targetPath))
+            {
+                string normalizedSource = KaleidoAssetOrganizerHelpers.NormalizeAssetPath(path);
+                copiedAssetsMap[normalizedSource] = targetPath;
+                movedAssetsMap[normalizedSource] = targetPath;
+                reused = true;
+                if (logEntries != null) logEntries.Add("Reused copy: " + path + " -> " + targetPath);
+                return true;
+            }
+
             if (path.Equals(targetPath, StringComparison.OrdinalIgnoreCase)
                 || AssetDatabase.LoadMainAssetAtPath(targetPath) != null)
             {
@@ -1490,6 +1508,32 @@ namespace KaleidoVR.EditorTools
             if (IsModelFile(targetPath)) RemapModelImporterMaterials(targetPath, logEntries);
             if (logEntries != null) logEntries.Add(logPrefix + ": " + path + " -> " + targetPath);
             return true;
+        }
+
+        private static bool CanShareCopiedFile(string path)
+        {
+            if (string.IsNullOrEmpty(path) || IsModelFile(path)) return false;
+            string ext = Path.GetExtension(path);
+            if (string.IsNullOrEmpty(ext)) return false;
+            switch (ext.ToLowerInvariant())
+            {
+                case ".mat":
+                case ".png":
+                case ".jpg":
+                case ".jpeg":
+                case ".tga":
+                case ".psd":
+                case ".tif":
+                case ".tiff":
+                case ".exr":
+                case ".hdr":
+                case ".bmp":
+                case ".gif":
+                case ".asset":
+                    return true;
+                default:
+                    return false;
+            }
         }
 
         private static void KeepMovedSourcesIfStillReferenced(

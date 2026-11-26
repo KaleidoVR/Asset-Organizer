@@ -1,5 +1,8 @@
 What's new
 
+1.2.11
+I keep one copy when this organize already copied that material or texture. The new folder keeps a single file, including when you organize from an earlier result.
+
 1.2.10
 I point the new Hierarchy at the materials from this organize. If you organize again from an earlier result, the new prefab and scene use the new Materials folder.
 
