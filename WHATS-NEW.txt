@@ -1,5 +1,8 @@
 What's new
 
+1.2.16
+I make one new file of each original your avatar uses, and the new files only point at each other. I leave out materials your FBX import points at that the avatar never uses. If two files are the same file and one has a 1 or 2 added to the name, they share one new file without the number. Two different files with the same name each get their own copy, so Foreskin Front 0 and Foreskin Front 100 stay apart. If a controller uses clips from inside an FBX, I copy that FBX too.
+
 1.2.15
 I keep one new file for each material and texture. An older copy in that folder, including one ending in 1, is removed. The Hierarchy and the new material use those new files.
 

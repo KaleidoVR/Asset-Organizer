@@ -22,7 +22,7 @@ namespace KaleidoVR.EditorTools
     public class KaleidoAssetOrganizer : EditorWindow
     {
         // Each digit rolls 0-9. After 1.0.9 comes 1.1.0; after 1.9.9 comes 2.0.0.
-        public static readonly string VERSION = "1.2.15";
+        public static readonly string VERSION = "1.2.16";
         public static string ReleaseName { get { return "Asset Organizer " + VERSION; } }
         public const string LOGO_FILE_NAME = "Kali_Logo.png";
         public const string FALLBACK_ICON_PATH = "Assets/KaleidoVR/Editor/Icons/Kali_Logo.png";
@@ -1177,6 +1177,9 @@ namespace KaleidoVR.EditorTools
                 List<string> dependencies = new List<string>(projectAssetPaths);
                 dependencies.Sort(CompareTransferOrder);
                 HashSet<string> selectedRootPrefabPaths = CollectSelectedPrefabAssetPaths(window.objectsToOrganize);
+                HashSet<string> directReferencedPaths = CollectDirectReferencedPaths(window.objectsToOrganize);
+                Dictionary<string, string> outputFileNames;
+                Dictionary<string, string> canonicalCopySources = BuildCanonicalCopySources(dependencies, window, fullyIgnoredAssetPaths, directReferencedPaths, out outputFileNames);
 
                 int totalAssets = Mathf.Max(1, dependencies.Count);
                 int currentAssetIndex = 0;
@@ -1199,6 +1202,28 @@ namespace KaleidoVR.EditorTools
 
                     if (processedPaths.Contains(path)) continue;
                     processedPaths.Add(path);
+
+                    if (canonicalCopySources.TryGetValue(path, out string canonicalSource)
+                        && !string.IsNullOrEmpty(canonicalSource)
+                        && !canonicalSource.Equals(path, StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (!processedPaths.Contains(canonicalSource))
+                        {
+                            processedPaths.Add(canonicalSource);
+                            outputFileNames.TryGetValue(canonicalSource, out string canonicalOutputName);
+                            CopyOneOrganizedAsset(canonicalSource, canonicalOutputName, window, fullyIgnoredAssetPaths, selectedRootPrefabPaths, copiedAssetsMap, copiedDestinations, movedAssetsMap, originalsToDeleteAfterMove, processedPaths, logEntries, ref copied, ref moved, ref ignored);
+                        }
+
+                        string normalizedAlias = KaleidoAssetOrganizerHelpers.NormalizeAssetPath(path);
+                        string normalizedCanonical = KaleidoAssetOrganizerHelpers.NormalizeAssetPath(canonicalSource);
+                        if (copiedAssetsMap.TryGetValue(normalizedCanonical, out string sharedDest))
+                        {
+                            copiedAssetsMap[normalizedAlias] = sharedDest;
+                            movedAssetsMap[normalizedAlias] = sharedDest;
+                            logEntries.Add("Same file as " + canonicalSource + ": " + path + " -> " + sharedDest);
+                            continue;
+                        }
+                    }
 
                     if (AssetDatabase.IsValidFolder(path)) continue;
 
@@ -1224,7 +1249,8 @@ namespace KaleidoVR.EditorTools
                     // Copy it to a unique path and never delete it, so this run stays isolated.
                     if (KaleidoAssetOrganizerHelpers.IsSameOrInside(path, window.outputDirectory))
                     {
-                        if (!TryCopyOrganizedAsset(path, window.outputDirectory, typeName, window.autoParsePoiyomi, copiedAssetsMap, copiedDestinations, movedAssetsMap, processedPaths, logEntries, "Isolated copy from existing organized file"))
+                        outputFileNames.TryGetValue(path, out string isolatedOutputName);
+                        if (!TryCopyOrganizedAsset(path, window.outputDirectory, typeName, window.autoParsePoiyomi, copiedAssetsMap, copiedDestinations, movedAssetsMap, processedPaths, logEntries, "Isolated copy from existing organized file", isolatedOutputName))
                         {
                             movedAssetsMap[path] = path;
                             logEntries.Add("Already in output: " + path);
@@ -1248,7 +1274,8 @@ namespace KaleidoVR.EditorTools
 
                         // Both modes copy so the output always has new GUIDs. Move deletes
                         // the source files later, after remaining references are retargeted.
-                        if (!TryCopyOrganizedAsset(path, window.outputDirectory, typeName, window.autoParsePoiyomi, copiedAssetsMap, copiedDestinations, movedAssetsMap, processedPaths, logEntries, action == "Move" ? "Moved" : "Copied"))
+                        outputFileNames.TryGetValue(path, out string copyOutputName);
+                        if (!TryCopyOrganizedAsset(path, window.outputDirectory, typeName, window.autoParsePoiyomi, copiedAssetsMap, copiedDestinations, movedAssetsMap, processedPaths, logEntries, action == "Move" ? "Moved" : "Copied", copyOutputName))
                         {
                             Debug.LogWarning("[KaleidoVR] " + action + " failed for " + path);
                             continue;
@@ -1462,7 +1489,8 @@ namespace KaleidoVR.EditorTools
             Dictionary<string, string> movedAssetsMap,
             HashSet<string> processedPaths,
             List<string> logEntries,
-            string logPrefix)
+            string logPrefix,
+            string outputFileName)
         {
             string normalizedSource = KaleidoAssetOrganizerHelpers.NormalizeAssetPath(path);
             string targetFolder = KaleidoAssetOrganizerHelpers.GetTargetFolder(
@@ -1475,55 +1503,20 @@ namespace KaleidoVR.EditorTools
                 return false;
             }
 
+            string copiedFileName = string.IsNullOrEmpty(outputFileName) ? Path.GetFileName(path) : outputFileName;
             string targetPath = KaleidoAssetOrganizerHelpers.NormalizeAssetPath(
-                $"{outputDirectory}/{targetFolder}/{CleanCopiedFileName(Path.GetFileName(path))}");
-            if (copiedDestinations.Contains(targetPath))
+                $"{outputDirectory}/{targetFolder}/{copiedFileName}");
+            if (path.Equals(targetPath, StringComparison.OrdinalIgnoreCase)
+                || copiedDestinations.Contains(targetPath)
+                || AssetDatabase.LoadMainAssetAtPath(targetPath) != null)
             {
-                copiedAssetsMap[normalizedSource] = targetPath;
-                movedAssetsMap[normalizedSource] = targetPath;
-                if (logEntries != null) logEntries.Add(logPrefix + ": " + path + " -> " + targetPath);
-                return true;
+                targetPath = AssetDatabase.GenerateUniqueAssetPath(targetPath);
             }
 
-            bool replacedExisting = false;
-            if (path.Equals(targetPath, StringComparison.OrdinalIgnoreCase))
+            if (string.IsNullOrEmpty(targetPath) || !AssetDatabase.CopyAsset(path, targetPath))
             {
-                string tempPath = AssetDatabase.GenerateUniqueAssetPath(targetPath);
-                if (string.IsNullOrEmpty(tempPath) || !AssetDatabase.CopyAsset(path, tempPath))
-                {
-                    if (logEntries != null) logEntries.Add(logPrefix + " failed: " + path);
-                    return false;
-                }
-                AssetDatabase.DeleteAsset(path);
-                string moveError = AssetDatabase.MoveAsset(tempPath, targetPath);
-                if (!string.IsNullOrEmpty(moveError))
-                {
-                    if (logEntries != null) logEntries.Add(logPrefix + " failed: " + path + " (" + moveError + ")");
-                    return false;
-                }
-                replacedExisting = true;
-            }
-            else
-            {
-                if (AssetDatabase.LoadMainAssetAtPath(targetPath) != null
-                    && KaleidoAssetOrganizerHelpers.IsSameOrInside(targetPath, outputDirectory))
-                {
-                    AssetDatabase.DeleteAsset(targetPath);
-                    replacedExisting = true;
-                }
-
-                if (!AssetDatabase.CopyAsset(path, targetPath))
-                {
-                    if (AssetDatabase.LoadMainAssetAtPath(targetPath) != null)
-                    {
-                        targetPath = AssetDatabase.GenerateUniqueAssetPath(targetPath);
-                    }
-                    if (string.IsNullOrEmpty(targetPath) || !AssetDatabase.CopyAsset(path, targetPath))
-                    {
-                        if (logEntries != null) logEntries.Add(logPrefix + " failed: " + path);
-                        return false;
-                    }
-                }
+                if (logEntries != null) logEntries.Add(logPrefix + " failed: " + path);
+                return false;
             }
 
             string normalizedTarget = KaleidoAssetOrganizerHelpers.NormalizeAssetPath(targetPath);
@@ -1532,42 +1525,446 @@ namespace KaleidoVR.EditorTools
             movedAssetsMap[normalizedSource] = normalizedTarget;
             processedPaths.Add(normalizedTarget);
             if (IsModelFile(normalizedTarget)) RemapModelImporterMaterials(normalizedTarget, logEntries);
-            RemoveNumberedCopies(normalizedTarget, copiedDestinations, logEntries);
-            if (replacedExisting && logEntries != null) logEntries.Add("Removed old copy: " + normalizedTarget);
             if (logEntries != null) logEntries.Add(logPrefix + ": " + path + " -> " + normalizedTarget);
             return true;
         }
 
-        private static string CleanCopiedFileName(string fileName)
+        private static void CopyOneOrganizedAsset(
+            string path,
+            string outputFileName,
+            KaleidoAssetOrganizer window,
+            HashSet<string> fullyIgnoredAssetPaths,
+            HashSet<string> selectedRootPrefabPaths,
+            Dictionary<string, string> copiedAssetsMap,
+            HashSet<string> copiedDestinations,
+            Dictionary<string, string> movedAssetsMap,
+            HashSet<string> originalsToDeleteAfterMove,
+            HashSet<string> processedPaths,
+            List<string> logEntries,
+            ref int copied,
+            ref int moved,
+            ref int ignored)
         {
-            if (string.IsNullOrEmpty(fileName)) return fileName;
-            string extension = Path.GetExtension(fileName);
+            if (string.IsNullOrEmpty(path) || AssetDatabase.IsValidFolder(path)) return;
+            if (KaleidoAssetOrganizerHelpers.ShouldIgnoreAsset(path) || (fullyIgnoredAssetPaths != null && fullyIgnoredAssetPaths.Contains(path)))
+            {
+                ignored++;
+                if (logEntries != null) logEntries.Add("Ignored: " + path);
+                return;
+            }
+
+            UnityEngine.Object mainAsset = AssetDatabase.LoadMainAssetAtPath(path);
+            string typeName = KaleidoAssetOrganizerHelpers.ResolveExportTypeName(path, mainAsset, mainAsset);
+            string action = KaleidoAssetOrganizerHelpers.ResolveOrganizeAction(window.organizeOptions, typeName);
+            if (action == "Ignore")
+            {
+                ignored++;
+                if (logEntries != null) logEntries.Add("Export Ignore: " + path);
+                return;
+            }
+
+            if (path.EndsWith(".prefab", StringComparison.OrdinalIgnoreCase))
+            {
+                if (action == "Move" && selectedRootPrefabPaths != null && selectedRootPrefabPaths.Contains(path))
+                    originalsToDeleteAfterMove.Add(path);
+                if (logEntries != null) logEntries.Add("Skipped prefab copy; the organized prefab is packed from the Hierarchy: " + path);
+                return;
+            }
+
+            string logPrefix = action == "Move" ? "Moved" : "Copied";
+            if (KaleidoAssetOrganizerHelpers.IsSameOrInside(path, window.outputDirectory))
+                logPrefix = "Isolated copy from existing organized file";
+
+            if (!TryCopyOrganizedAsset(path, window.outputDirectory, typeName, window.autoParsePoiyomi, copiedAssetsMap, copiedDestinations, movedAssetsMap, processedPaths, logEntries, logPrefix, outputFileName))
+            {
+                Debug.LogWarning("[KaleidoVR] " + action + " failed for " + path);
+                return;
+            }
+
+            if (logPrefix == "Isolated copy from existing organized file" || action != "Move")
+            {
+                copied++;
+                return;
+            }
+
+            moved++;
+            originalsToDeleteAfterMove.Add(path);
+        }
+
+        private static readonly System.Text.RegularExpressions.Regex GuidReferencePattern =
+            new System.Text.RegularExpressions.Regex("guid: ([0-9a-fA-F]{32})");
+
+        private static Dictionary<string, string> BuildCanonicalCopySources(
+            List<string> dependencies,
+            KaleidoAssetOrganizer window,
+            HashSet<string> fullyIgnoredAssetPaths,
+            HashSet<string> directReferencedPaths,
+            out Dictionary<string, string> outputFileNames)
+        {
+            Dictionary<string, string> canonical = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            outputFileNames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (dependencies == null || window == null) return canonical;
+
+            string root = GetProjectRootPath();
+            Dictionary<string, string> folderByPath = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            Dictionary<string, HashSet<string>> namesByFolder = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+            List<string> candidates = new List<string>();
+            foreach (string path in dependencies)
+            {
+                if (!IsMergeCandidate(path, window, fullyIgnoredAssetPaths)) continue;
+                string folder = TargetFolderForPath(path, window);
+                folderByPath[path] = folder;
+                candidates.Add(path);
+                if (!namesByFolder.TryGetValue(folder, out HashSet<string> names))
+                {
+                    names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    namesByFolder[folder] = names;
+                }
+                names.Add(Path.GetFileName(path));
+            }
+
+            List<string> groupKeys = new List<string>();
+            Dictionary<string, List<string>> groups = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+            foreach (string path in candidates)
+            {
+                string folder = folderByPath[path];
+                string desired = DesiredCopyName(path, namesByFolder[folder], root);
+                string key = folder + "/" + desired;
+                if (!groups.TryGetValue(key, out List<string> group))
+                {
+                    group = new List<string>();
+                    groups[key] = group;
+                    groupKeys.Add(key);
+                }
+                group.Add(path);
+            }
+
+            Dictionary<string, string> guidToPath = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (string path in candidates)
+            {
+                string guid = AssetDatabase.AssetPathToGUID(path);
+                if (!string.IsNullOrEmpty(guid)) guidToPath[guid] = path;
+            }
+
+            Dictionary<string, string> tokenCache = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            HashSet<string> reserved = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            List<string> laterFolders = new List<string>();
+            List<string> laterDesired = new List<string>();
+            List<List<string>> laterMembers = new List<List<string>>();
+
+            foreach (string key in groupKeys)
+            {
+                int slash = key.LastIndexOf('/');
+                string folder = key.Substring(0, slash);
+                string desired = key.Substring(slash + 1);
+                string folderFull = KaleidoAssetOrganizerHelpers.NormalizeAssetPath(window.outputDirectory + "/" + folder);
+
+                List<List<string>> sameContent = SplitByContent(groups[key], guidToPath, tokenCache, root);
+                int primary = ChoosePrimaryGroup(sameContent, desired, directReferencedPaths);
+                string primaryName = ReserveCopyName(folderFull, desired, desired, reserved, root);
+                AssignCopyGroup(sameContent[primary], primaryName, directReferencedPaths, canonical, outputFileNames);
+
+                for (int i = 0; i < sameContent.Count; i++)
+                {
+                    if (i == primary) continue;
+                    laterFolders.Add(folderFull);
+                    laterDesired.Add(desired);
+                    laterMembers.Add(sameContent[i]);
+                }
+            }
+
+            for (int i = 0; i < laterMembers.Count; i++)
+            {
+                string source = ChooseCopyRepresentative(laterMembers[i], null, directReferencedPaths);
+                string name = ReserveCopyName(laterFolders[i], Path.GetFileName(source), laterDesired[i], reserved, root);
+                AssignCopyGroup(laterMembers[i], name, directReferencedPaths, canonical, outputFileNames);
+            }
+
+            return canonical;
+        }
+
+        private static bool IsMergeCandidate(string path, KaleidoAssetOrganizer window, HashSet<string> fullyIgnoredAssetPaths)
+        {
+            if (string.IsNullOrEmpty(path) || AssetDatabase.IsValidFolder(path)) return false;
+            if (KaleidoAssetOrganizerHelpers.ShouldIgnoreAsset(path)) return false;
+            if (fullyIgnoredAssetPaths != null && fullyIgnoredAssetPaths.Contains(path)) return false;
+            if (path.EndsWith(".prefab", StringComparison.OrdinalIgnoreCase)) return false;
+            UnityEngine.Object mainAsset = AssetDatabase.LoadMainAssetAtPath(path);
+            string typeName = KaleidoAssetOrganizerHelpers.ResolveExportTypeName(path, mainAsset, mainAsset);
+            string action = KaleidoAssetOrganizerHelpers.ResolveOrganizeAction(window.organizeOptions, typeName);
+            if (action == "Ignore") return false;
+            if (KaleidoAssetOrganizerHelpers.IsSameOrInside(path, window.outputDirectory)) return true;
+            return action == "Copy";
+        }
+
+        private static string TargetFolderForPath(string path, KaleidoAssetOrganizer window)
+        {
+            UnityEngine.Object mainAsset = AssetDatabase.LoadMainAssetAtPath(path);
+            string typeName = KaleidoAssetOrganizerHelpers.ResolveExportTypeName(path, mainAsset, mainAsset);
+            return KaleidoAssetOrganizerHelpers.GetTargetFolder(
+                KaleidoAssetOrganizerHelpers.AliasOrganizeType(typeName), path, window.autoParsePoiyomi);
+        }
+
+        // " 1" through " 99" is what Unity adds when the name was already taken in that folder.
+        private static string DesiredCopyName(string path, HashSet<string> namesInTargetFolder, string root)
+        {
+            string fileName = Path.GetFileName(path);
             string stem = Path.GetFileNameWithoutExtension(fileName);
+            string extension = Path.GetExtension(fileName);
             int space = stem.LastIndexOf(' ');
             if (space <= 0 || space >= stem.Length - 1) return fileName;
             string tail = stem.Substring(space + 1);
-            for (int i = 0; i < tail.Length; i++)
+            if (tail.Length > 2 || tail[0] < '1' || tail[0] > '9') return fileName;
+            for (int i = 1; i < tail.Length; i++)
             {
                 if (tail[i] < '0' || tail[i] > '9') return fileName;
             }
-            return stem.Substring(0, space) + extension;
+
+            string baseName = stem.Substring(0, space).TrimEnd() + extension;
+            if (namesInTargetFolder != null && namesInTargetFolder.Contains(baseName)) return baseName;
+
+            string sourceFolder = Path.GetDirectoryName(path);
+            if (!string.IsNullOrEmpty(sourceFolder)
+                && File.Exists(Path.Combine(root, sourceFolder.Replace("\\", "/") + "/" + baseName)))
+            {
+                return baseName;
+            }
+            return fileName;
         }
 
-        private static void RemoveNumberedCopies(string targetPath, HashSet<string> keep, List<string> logEntries)
+        private static List<List<string>> SplitByContent(
+            List<string> members,
+            Dictionary<string, string> guidToPath,
+            Dictionary<string, string> tokenCache,
+            string root)
         {
-            string directory = Path.GetDirectoryName(targetPath);
-            if (string.IsNullOrEmpty(directory)) return;
-            directory = directory.Replace("\\", "/");
-            string extension = Path.GetExtension(targetPath);
-            string stem = Path.GetFileNameWithoutExtension(targetPath);
-            for (int number = 1; number <= 30; number++)
+            List<List<string>> result = new List<List<string>>();
+            if (members == null || members.Count == 0) return result;
+            if (members.Count == 1)
             {
-                string extra = KaleidoAssetOrganizerHelpers.NormalizeAssetPath(directory + "/" + stem + " " + number + extension);
-                if (keep != null && keep.Contains(extra)) continue;
-                if (AssetDatabase.LoadMainAssetAtPath(extra) == null) continue;
-                if (!AssetDatabase.DeleteAsset(extra)) continue;
-                if (logEntries != null) logEntries.Add("Removed old copy: " + extra);
+                result.Add(new List<string> { members[0] });
+                return result;
             }
+
+            Dictionary<string, List<string>> byToken = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+            foreach (string path in members)
+            {
+                string token = GetContentToken(path, guidToPath, tokenCache, new HashSet<string>(StringComparer.OrdinalIgnoreCase), root, 0);
+                if (!byToken.TryGetValue(token, out List<string> same))
+                {
+                    same = new List<string>();
+                    byToken[token] = same;
+                    result.Add(same);
+                }
+                same.Add(path);
+            }
+            return result;
+        }
+
+        private static string GetContentToken(
+            string path,
+            Dictionary<string, string> guidToPath,
+            Dictionary<string, string> tokenCache,
+            HashSet<string> visiting,
+            string root,
+            int depth)
+        {
+            if (tokenCache.TryGetValue(path, out string cached)) return cached;
+            if (depth > 8 || !visiting.Add(path)) return "path:" + path;
+
+            string token = "path:" + path;
+            try
+            {
+                if (!IsModelFile(path))
+                {
+                    byte[] bytes = File.ReadAllBytes(Path.Combine(root, path));
+                    if (IsYamlAsset(bytes))
+                    {
+                        string text = System.Text.Encoding.UTF8.GetString(bytes);
+                        string stem = Path.GetFileNameWithoutExtension(path);
+                        text = System.Text.RegularExpressions.Regex.Replace(
+                            text,
+                            "^(\\s*m_Name: )" + System.Text.RegularExpressions.Regex.Escape(stem) + "[ \\t]*\\r?$",
+                            "$1",
+                            System.Text.RegularExpressions.RegexOptions.Multiline);
+                        text = GuidReferencePattern.Replace(text, match =>
+                        {
+                            string guid = match.Groups[1].Value;
+                            if (!guidToPath.TryGetValue(guid, out string referencedPath)) return match.Value;
+                            if (referencedPath.Equals(path, StringComparison.OrdinalIgnoreCase)) return "guid: self";
+                            return "guid: " + GetContentToken(referencedPath, guidToPath, tokenCache, visiting, root, depth + 1);
+                        });
+                        token = "yaml:" + HashBytes(System.Text.Encoding.UTF8.GetBytes(text));
+                    }
+                    else
+                    {
+                        token = "bin:" + HashBytes(bytes) + TextureImportSignature(path);
+                    }
+                }
+            }
+            catch (Exception)
+            {
+                token = "path:" + path;
+            }
+
+            visiting.Remove(path);
+            tokenCache[path] = token;
+            return token;
+        }
+
+        private static bool IsYamlAsset(byte[] bytes)
+        {
+            return bytes != null && bytes.Length >= 5
+                && bytes[0] == (byte)'%' && bytes[1] == (byte)'Y' && bytes[2] == (byte)'A'
+                && bytes[3] == (byte)'M' && bytes[4] == (byte)'L';
+        }
+
+        private static string HashBytes(byte[] bytes)
+        {
+            using (System.Security.Cryptography.MD5 md5 = System.Security.Cryptography.MD5.Create())
+            {
+                return BitConverter.ToString(md5.ComputeHash(bytes)).Replace("-", string.Empty);
+            }
+        }
+
+        private static string TextureImportSignature(string path)
+        {
+            TextureImporter importer = AssetImporter.GetAtPath(path) as TextureImporter;
+            if (importer == null) return string.Empty;
+            return "|" + importer.textureType + "|" + importer.textureShape + "|" + importer.sRGBTexture
+                + "|" + importer.alphaSource + "|" + importer.alphaIsTransparency + "|" + importer.mipmapEnabled
+                + "|" + importer.isReadable + "|" + importer.wrapMode + "|" + importer.filterMode
+                + "|" + importer.maxTextureSize + "|" + importer.textureCompression + "|" + importer.crunchedCompression
+                + "|" + importer.npotScale;
+        }
+
+        private static int ChoosePrimaryGroup(List<List<string>> groups, string desired, HashSet<string> directReferencedPaths)
+        {
+            for (int i = 0; i < groups.Count; i++)
+            {
+                foreach (string path in groups[i])
+                {
+                    if (directReferencedPaths != null && directReferencedPaths.Contains(path)) return i;
+                }
+            }
+            for (int i = 0; i < groups.Count; i++)
+            {
+                foreach (string path in groups[i])
+                {
+                    if (string.Equals(Path.GetFileName(path), desired, StringComparison.OrdinalIgnoreCase)) return i;
+                }
+            }
+            return 0;
+        }
+
+        private static string ChooseCopyRepresentative(List<string> members, string outputFileName, HashSet<string> directReferencedPaths)
+        {
+            foreach (string path in members)
+            {
+                if (directReferencedPaths != null && directReferencedPaths.Contains(path)) return path;
+            }
+            if (!string.IsNullOrEmpty(outputFileName))
+            {
+                foreach (string path in members)
+                {
+                    if (string.Equals(Path.GetFileName(path), outputFileName, StringComparison.OrdinalIgnoreCase)) return path;
+                }
+            }
+            return members[0];
+        }
+
+        private static void AssignCopyGroup(
+            List<string> members,
+            string outputFileName,
+            HashSet<string> directReferencedPaths,
+            Dictionary<string, string> canonical,
+            Dictionary<string, string> outputFileNames)
+        {
+            string representative = ChooseCopyRepresentative(members, outputFileName, directReferencedPaths);
+            foreach (string path in members)
+            {
+                canonical[path] = representative;
+                outputFileNames[path] = outputFileName;
+            }
+        }
+
+        private static string ReserveCopyName(string folderFull, string preferredName, string fallbackName, HashSet<string> reserved, string root)
+        {
+            string candidate = KaleidoAssetOrganizerHelpers.NormalizeAssetPath(folderFull + "/" + preferredName);
+            if (!IsCopyNameTaken(candidate, reserved, root))
+            {
+                reserved.Add(candidate);
+                return preferredName;
+            }
+
+            string stem = Path.GetFileNameWithoutExtension(fallbackName);
+            string extension = Path.GetExtension(fallbackName);
+            for (int number = 1; number < 1000; number++)
+            {
+                string name = stem + " " + number + extension;
+                candidate = KaleidoAssetOrganizerHelpers.NormalizeAssetPath(folderFull + "/" + name);
+                if (IsCopyNameTaken(candidate, reserved, root)) continue;
+                reserved.Add(candidate);
+                return name;
+            }
+            return preferredName;
+        }
+
+        private static bool IsCopyNameTaken(string assetPath, HashSet<string> reserved, string root)
+        {
+            if (reserved.Contains(assetPath)) return true;
+            string full = Path.Combine(root, assetPath);
+            return File.Exists(full) || Directory.Exists(full);
+        }
+
+        private static HashSet<string> CollectDirectReferencedPaths(List<UnityEngine.Object> selected)
+        {
+            HashSet<string> paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (selected == null) return paths;
+
+            foreach (UnityEngine.Object obj in selected)
+            {
+                if (obj == null) continue;
+                AddResolvedAssetPath(obj, paths, null);
+
+                GameObject go = obj as GameObject;
+                if (go == null && obj is Component component) go = component.gameObject;
+                if (go == null) continue;
+
+                HarvestSerializedAssetReferences(go, paths);
+                Component[] components = go.GetComponentsInChildren<Component>(true);
+                if (components != null)
+                {
+                    foreach (Component comp in components)
+                    {
+                        if (comp != null) HarvestSerializedAssetReferences(comp, paths);
+                    }
+                }
+
+                Renderer[] renderers = go.GetComponentsInChildren<Renderer>(true);
+                if (renderers == null) continue;
+                foreach (Renderer renderer in renderers)
+                {
+                    if (renderer == null) continue;
+                    Material[] materials;
+                    try
+                    {
+                        materials = renderer.sharedMaterials;
+                    }
+                    catch (Exception)
+                    {
+                        continue;
+                    }
+                    if (materials == null) continue;
+                    foreach (Material material in materials)
+                    {
+                        if (material == null) continue;
+                        AddAssetPath(AssetDatabase.GetAssetPath(material), paths);
+                    }
+                }
+            }
+
+            return paths;
         }
 
         private static void KeepMovedSourcesIfStillReferenced(
@@ -1844,22 +2241,40 @@ namespace KaleidoVR.EditorTools
                 }
             }
 
-            string[] seeds = new string[assetPaths.Count];
-            assetPaths.CopyTo(seeds);
-            foreach (string seedPath in seeds)
+            // FBX importer remaps and shader default textures are not used by the copy.
+            Queue<string> pending = new Queue<string>(assetPaths);
+            HashSet<string> expanded = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            while (pending.Count > 0)
             {
-                if (string.IsNullOrEmpty(seedPath) || KaleidoAssetOrganizerHelpers.ShouldIgnoreAsset(seedPath)) continue;
-                if (IsModelFile(seedPath)) continue;
+                string current = KaleidoAssetOrganizerHelpers.NormalizeAssetPath(pending.Dequeue());
+                if (string.IsNullOrEmpty(current) || !expanded.Add(current)) continue;
+                if (KaleidoAssetOrganizerHelpers.ShouldIgnoreAsset(current)) continue;
+                if (IsModelFile(current) || current.EndsWith(".shader", StringComparison.OrdinalIgnoreCase)) continue;
+
+                string[] directDependencies;
                 try
                 {
-                    foreach (string depPath in AssetDatabase.GetDependencies(seedPath, true))
-                    {
-                        if (IsModelFile(depPath)) continue;
-                        AddAssetPath(depPath, assetPaths);
-                    }
+                    directDependencies = AssetDatabase.GetDependencies(current, false);
                 }
                 catch (Exception)
                 {
+                    continue;
+                }
+                if (directDependencies == null) continue;
+
+                bool currentIsPrefab = current.EndsWith(".prefab", StringComparison.OrdinalIgnoreCase);
+                foreach (string depPath in directDependencies)
+                {
+                    string dep = KaleidoAssetOrganizerHelpers.NormalizeAssetPath(depPath);
+                    if (string.IsNullOrEmpty(dep) || dep.Equals(current, StringComparison.OrdinalIgnoreCase)) continue;
+                    if (IsModelFile(dep))
+                    {
+                        // Prefab meshes come from the Hierarchy so Ignore List objects stay out.
+                        if (!currentIsPrefab) AddAssetPath(dep, assetPaths);
+                        continue;
+                    }
+                    AddAssetPath(dep, assetPaths);
+                    pending.Enqueue(dep);
                 }
             }
 
