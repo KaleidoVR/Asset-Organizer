@@ -22,7 +22,7 @@ namespace KaleidoVR.EditorTools
     public class KaleidoAssetOrganizer : EditorWindow
     {
         // Each digit rolls 0-9. After 1.0.9 comes 1.1.0; after 1.9.9 comes 2.0.0.
-        public static readonly string VERSION = "1.2.9";
+        public static readonly string VERSION = "1.2.10";
         public static string ReleaseName { get { return "Asset Organizer " + VERSION; } }
         public const string LOGO_FILE_NAME = "Kali_Logo.png";
         public const string FALLBACK_ICON_PATH = "Assets/KaleidoVR/Editor/Icons/Kali_Logo.png";
@@ -1084,6 +1084,8 @@ namespace KaleidoVR.EditorTools
             HashSet<int> protectedInstanceIds = BuildProtectedInstanceIds(window.objectsToOrganize);
             HashSet<string> protectedAssetPaths = BuildProtectedAssetPaths(window.objectsToOrganize);
             HashSet<string> poiyomiUnlockedToRelock = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            string savedPrefabPath = null;
+            string savedScenePath = null;
             s_thryOptimizerLogged = false;
 
             try
@@ -1282,7 +1284,6 @@ namespace KaleidoVR.EditorTools
                 string transferActionName = moved > 0 ? "Move" : (copied > 0 ? "Copy" : "Ignore");
                 string organizedObjectName = safePrefabName;
                 string prefabFileName = safePrefabName;
-                string savedPrefabPath = null;
                 GameObject finalTargetRoot = null;
                 List<GameObject> instantiatedInstances = new List<GameObject>();
 
@@ -1328,11 +1329,11 @@ namespace KaleidoVR.EditorTools
                             protectedInstanceIds,
                             logEntries);
 
-                        Component[] allComponents = finalTargetRoot.GetComponentsInChildren<Component>(true);
-                        foreach (Component comp in allComponents)
+                        int hierarchyMaterials;
+                        RemapOrganizedObject(finalTargetRoot, copiedAssetsMap, protectedInstanceIds, out hierarchyMaterials);
+                        if (hierarchyMaterials > 0)
                         {
-                            if (comp == null || IsProtectedObject(comp, protectedInstanceIds)) continue;
-                            RemapSerializedReferences(comp, copiedAssetsMap);
+                            logEntries.Add("Retargeted hierarchy materials: " + hierarchyMaterials);
                         }
 
                         if (window.autoSetupVRCDescriptor && activeTargetGameObjects.Count <= 1)
@@ -1360,7 +1361,7 @@ namespace KaleidoVR.EditorTools
                         }
 
                         bool consumedWorkingRoot;
-                        SaveOrganizedScene(window, finalTargetRoot, savedPrefabPath, organizedObjectName, logEntries, out consumedWorkingRoot);
+                        savedScenePath = SaveOrganizedScene(window, finalTargetRoot, savedPrefabPath, organizedObjectName, copiedAssetsMap, logEntries, out consumedWorkingRoot);
                         if (consumedWorkingRoot) finalTargetRoot = null;
 
                         Debug.Log($"[KaleidoVR] Pipeline operations finalized. Backup file records mapped independently.");
@@ -1428,6 +1429,11 @@ namespace KaleidoVR.EditorTools
                     RelockPoiyomiMaterials(poiyomiUnlockedToRelock, logEntries);
                     poiyomiUnlockedToRelock.Clear();
                 }
+                if (copiedAssetsMap.Count > 0
+                    && (!string.IsNullOrEmpty(savedPrefabPath) || !string.IsNullOrEmpty(savedScenePath)))
+                {
+                    RetargetOrganizedOutputMaterials(savedPrefabPath, savedScenePath, copiedAssetsMap, logEntries);
+                }
                 EditorUtility.ClearProgressBar();
                 try
                 {
@@ -1475,9 +1481,11 @@ namespace KaleidoVR.EditorTools
                 return false;
             }
 
-            copiedAssetsMap[path] = targetPath;
-            copiedDestinations.Add(targetPath);
-            movedAssetsMap[path] = targetPath;
+            string normalizedSource = KaleidoAssetOrganizerHelpers.NormalizeAssetPath(path);
+            string normalizedTarget = KaleidoAssetOrganizerHelpers.NormalizeAssetPath(targetPath);
+            copiedAssetsMap[normalizedSource] = normalizedTarget;
+            copiedDestinations.Add(normalizedTarget);
+            movedAssetsMap[normalizedSource] = normalizedTarget;
             processedPaths.Add(targetPath);
             if (IsModelFile(targetPath)) RemapModelImporterMaterials(targetPath, logEntries);
             if (logEntries != null) logEntries.Add(logPrefix + ": " + path + " -> " + targetPath);
@@ -1742,6 +1750,8 @@ namespace KaleidoVR.EditorTools
                 {
                     HarvestSerializedAssetReferences(target, assetPaths);
                 }
+
+                AddLiveRendererMaterialPaths(go, assetPaths, ignoredHierarchy);
 
                 try
                 {
@@ -2135,6 +2145,36 @@ namespace KaleidoVR.EditorTools
             assetPaths.Add(path);
         }
 
+        private static void AddLiveRendererMaterialPaths(GameObject root, HashSet<string> assetPaths, HashSet<GameObject> ignoredHierarchy)
+        {
+            if (root == null || assetPaths == null) return;
+
+            Renderer[] renderers = root.GetComponentsInChildren<Renderer>(true);
+            if (renderers == null) return;
+            foreach (Renderer renderer in renderers)
+            {
+                if (renderer == null) continue;
+                if (ignoredHierarchy != null && ignoredHierarchy.Contains(renderer.gameObject)) continue;
+
+                Material[] materials;
+                try
+                {
+                    materials = renderer.sharedMaterials;
+                }
+                catch (Exception)
+                {
+                    continue;
+                }
+                if (materials == null) continue;
+
+                for (int i = 0; i < materials.Length; i++)
+                {
+                    if (materials[i] == null) continue;
+                    AddAssetPath(AssetDatabase.GetAssetPath(materials[i]), assetPaths);
+                }
+            }
+        }
+
         private enum AssetHarvestMode
         {
             All,
@@ -2405,7 +2445,7 @@ namespace KaleidoVR.EditorTools
             return null;
         }
 
-        private static string SaveOrganizedScene(KaleidoAssetOrganizer window, GameObject workingRoot, string savedPrefabPath, string safePrefabName, List<string> logEntries, out bool consumedWorkingRoot)
+        private static string SaveOrganizedScene(KaleidoAssetOrganizer window, GameObject workingRoot, string savedPrefabPath, string safePrefabName, Dictionary<string, string> copiedAssetsMap, List<string> logEntries, out bool consumedWorkingRoot)
         {
             consumedWorkingRoot = false;
             if (window == null) return null;
@@ -2449,6 +2489,12 @@ namespace KaleidoVR.EditorTools
                 if (sceneInstance != null)
                 {
                     sceneInstance.name = string.IsNullOrEmpty(safePrefabName) ? safeSceneName : safePrefabName;
+                    int sceneMaterials;
+                    RemapOrganizedObject(sceneInstance, copiedAssetsMap, null, out sceneMaterials);
+                    if (sceneMaterials > 0 && logEntries != null)
+                    {
+                        logEntries.Add("Retargeted scene materials: " + sceneMaterials);
+                    }
                 }
 
                 AddOrganizedSceneCamera(organizedScene);
@@ -3985,13 +4031,16 @@ namespace KaleidoVR.EditorTools
             HashSet<string> skip = ShouldSkipPrefabRemap(root, skipPrefabOnIds) ? skipPrefabPaths : null;
             RemapSerializedReferences(root, copiedAssetsMap, skip);
             Component[] components = root.GetComponentsInChildren<Component>(true);
-            if (components == null) return;
-            foreach (Component comp in components)
+            if (components != null)
             {
-                if (comp == null) continue;
-                skip = ShouldSkipPrefabRemap(comp, skipPrefabOnIds) ? skipPrefabPaths : null;
-                RemapSerializedReferences(comp, copiedAssetsMap, skip);
+                foreach (Component comp in components)
+                {
+                    if (comp == null) continue;
+                    skip = ShouldSkipPrefabRemap(comp, skipPrefabOnIds) ? skipPrefabPaths : null;
+                    RemapSerializedReferences(comp, copiedAssetsMap, skip);
+                }
             }
+            RemapRendererMaterials(root, copiedAssetsMap, null);
         }
 
         private static bool ShouldSkipPrefabRemap(UnityEngine.Object obj, HashSet<int> skipPrefabOnIds)
@@ -4002,7 +4051,7 @@ namespace KaleidoVR.EditorTools
         private static UnityEngine.Object RemapReferencedObject(UnityEngine.Object original, Dictionary<string, string> copiedAssetsMap)
         {
             if (original == null || copiedAssetsMap == null || copiedAssetsMap.Count == 0) return original;
-            string path = AssetDatabase.GetAssetPath(original);
+            string path = KaleidoAssetOrganizerHelpers.NormalizeAssetPath(AssetDatabase.GetAssetPath(original));
             if (string.IsNullOrEmpty(path)) return original;
             if (!copiedAssetsMap.TryGetValue(path, out string remappedPath)) return original;
             if (path.Equals(remappedPath, StringComparison.OrdinalIgnoreCase)) return original;
@@ -4475,18 +4524,18 @@ namespace KaleidoVR.EditorTools
             }
         }
 
-        private static void RemapSerializedReferences(
+        private static bool RemapSerializedReferences(
             UnityEngine.Object target,
             Dictionary<string, string> movedAssetsMap,
             HashSet<string> skipSourcePaths = null)
         {
-            if (target == null || movedAssetsMap == null || movedAssetsMap.Count == 0) return;
+            if (target == null || movedAssetsMap == null || movedAssetsMap.Count == 0) return false;
 
             try
             {
                 SerializedObject serializedObject = new SerializedObject(target);
                 SerializedProperty property = serializedObject.GetIterator();
-                bool modified = false;
+                List<string> propertyPaths = new List<string>();
                 bool enterChildren = true;
                 while (property.Next(enterChildren))
                 {
@@ -4510,12 +4559,8 @@ namespace KaleidoVR.EditorTools
                         if (string.IsNullOrEmpty(referencedPath)) continue;
                         if (!movedAssetsMap.TryGetValue(referencedPath, out string remappedPath)) continue;
                         if (referencedPath.Equals(remappedPath, StringComparison.OrdinalIgnoreCase)) continue;
-
-                        UnityEngine.Object remapped = FindRemappedObject(referenced, remappedPath);
-                        if (remapped == null) continue;
-
-                        property.objectReferenceValue = remapped;
-                        modified = true;
+                        if (FindRemappedObject(referenced, remappedPath) == null) continue;
+                        propertyPaths.Add(property.propertyPath);
                     }
                     catch (Exception)
                     {
@@ -4523,16 +4568,51 @@ namespace KaleidoVR.EditorTools
                     }
                 }
 
-                if (modified) serializedObject.ApplyModifiedPropertiesWithoutUndo();
+                if (propertyPaths.Count == 0) return false;
+
+                bool modified = false;
+                for (int i = 0; i < propertyPaths.Count; i++)
+                {
+                    SerializedProperty slot = serializedObject.FindProperty(propertyPaths[i]);
+                    if (slot == null || slot.propertyType != SerializedPropertyType.ObjectReference) continue;
+
+                    UnityEngine.Object referenced = slot.objectReferenceValue;
+                    if (referenced == null) continue;
+                    string referencedPath = KaleidoAssetOrganizerHelpers.NormalizeAssetPath(AssetDatabase.GetAssetPath(referenced));
+                    if (string.IsNullOrEmpty(referencedPath)) continue;
+                    if (!movedAssetsMap.TryGetValue(referencedPath, out string remappedPath)) continue;
+                    if (referencedPath.Equals(remappedPath, StringComparison.OrdinalIgnoreCase)) continue;
+
+                    UnityEngine.Object remapped = FindRemappedObject(referenced, remappedPath);
+                    if (remapped == null || remapped == referenced) continue;
+
+                    slot.objectReferenceValue = remapped;
+                    modified = true;
+                }
+
+                if (!modified) return false;
+                serializedObject.ApplyModifiedPropertiesWithoutUndo();
+                EditorUtility.SetDirty(target);
+                RecordPrefabModifications(target);
+                return true;
             }
             catch (Exception)
             {
+                return false;
             }
         }
 
         private static UnityEngine.Object FindRemappedObject(UnityEngine.Object original, string remappedPath)
         {
             if (original == null || string.IsNullOrEmpty(remappedPath)) return null;
+
+            if (original is Material
+                && remappedPath.EndsWith(".mat", StringComparison.OrdinalIgnoreCase)
+                && AssetDatabase.IsMainAsset(original))
+            {
+                Material material = AssetDatabase.LoadAssetAtPath<Material>(remappedPath);
+                if (material != null) return material;
+            }
 
             Type type = original.GetType();
             UnityEngine.Object[] assets = AssetDatabase.LoadAllAssetsAtPath(remappedPath);
@@ -4581,6 +4661,324 @@ namespace KaleidoVR.EditorTools
             if (nameMatchIgnoreCase != null) return nameMatchIgnoreCase;
             if (AssetDatabase.IsMainAsset(original)) return AssetDatabase.LoadMainAssetAtPath(remappedPath);
             if (typeCount == 1) return onlyTypeMatch;
+            return null;
+        }
+
+        private static bool RemapOrganizedObject(
+            GameObject root,
+            Dictionary<string, string> copiedAssetsMap,
+            HashSet<int> protectedInstanceIds,
+            out int materialSlots)
+        {
+            materialSlots = 0;
+            if (root == null || copiedAssetsMap == null || copiedAssetsMap.Count == 0) return false;
+
+            bool changed = false;
+            if (!IsProtectedObject(root, protectedInstanceIds)
+                && RemapSerializedReferences(root, copiedAssetsMap))
+            {
+                changed = true;
+            }
+
+            Component[] components = root.GetComponentsInChildren<Component>(true);
+            if (components != null)
+            {
+                foreach (Component comp in components)
+                {
+                    if (comp == null || IsProtectedObject(comp, protectedInstanceIds)) continue;
+                    if (RemapSerializedReferences(comp, copiedAssetsMap)) changed = true;
+                }
+            }
+
+            materialSlots = RemapRendererMaterials(root, copiedAssetsMap, protectedInstanceIds);
+            if (materialSlots > 0) changed = true;
+            return changed;
+        }
+
+        private static int RemapRendererMaterials(
+            GameObject root,
+            Dictionary<string, string> copiedAssetsMap,
+            HashSet<int> protectedInstanceIds)
+        {
+            if (root == null || copiedAssetsMap == null || copiedAssetsMap.Count == 0) return 0;
+
+            int changedSlots = 0;
+            Renderer[] renderers = root.GetComponentsInChildren<Renderer>(true);
+            if (renderers == null) return 0;
+
+            foreach (Renderer renderer in renderers)
+            {
+                if (renderer == null || IsProtectedObject(renderer, protectedInstanceIds)) continue;
+
+                Material[] materials;
+                try
+                {
+                    materials = renderer.sharedMaterials;
+                }
+                catch (Exception)
+                {
+                    continue;
+                }
+                if (materials == null || materials.Length == 0) continue;
+
+                int slotChanges = 0;
+                for (int i = 0; i < materials.Length; i++)
+                {
+                    if (materials[i] == null) continue;
+                    Material remapped = RemapReferencedObject(materials[i], copiedAssetsMap) as Material;
+                    if (remapped == null || remapped == materials[i]) continue;
+                    materials[i] = remapped;
+                    slotChanges++;
+                }
+                if (slotChanges == 0) continue;
+
+                bool applied = false;
+                try
+                {
+                    renderer.sharedMaterials = materials;
+                    applied = true;
+                }
+                catch (Exception)
+                {
+                }
+
+                if (WriteRendererMaterialProperty(renderer, materials)) applied = true;
+                if (!applied) continue;
+
+                changedSlots += slotChanges;
+                EditorUtility.SetDirty(renderer);
+                if (renderer.gameObject != null) EditorUtility.SetDirty(renderer.gameObject);
+                RecordPrefabModifications(renderer);
+            }
+
+            return changedSlots;
+        }
+
+        private static bool WriteRendererMaterialProperty(Renderer renderer, Material[] materials)
+        {
+            if (renderer == null || materials == null) return false;
+
+            try
+            {
+                SerializedObject serializedObject = new SerializedObject(renderer);
+                SerializedProperty property = serializedObject.FindProperty("m_Materials");
+                if (property == null || !property.isArray) return false;
+                if (property.arraySize != materials.Length) property.arraySize = materials.Length;
+                for (int i = 0; i < materials.Length; i++)
+                {
+                    property.GetArrayElementAtIndex(i).objectReferenceValue = materials[i];
+                }
+                serializedObject.ApplyModifiedPropertiesWithoutUndo();
+                return true;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
+        private static void RecordPrefabModifications(UnityEngine.Object target)
+        {
+            if (target == null) return;
+            try
+            {
+                if (PrefabUtility.IsPartOfPrefabInstance(target))
+                    PrefabUtility.RecordPrefabInstancePropertyModifications(target);
+            }
+            catch (Exception)
+            {
+            }
+        }
+
+        private static void RetargetOrganizedOutputMaterials(
+            string prefabPath,
+            string scenePath,
+            Dictionary<string, string> copiedAssetsMap,
+            List<string> logEntries)
+        {
+            if (copiedAssetsMap == null || copiedAssetsMap.Count == 0) return;
+
+            if (!string.IsNullOrEmpty(prefabPath))
+            {
+                RetargetPrefabAssetMaterials(prefabPath, copiedAssetsMap, logEntries, string.IsNullOrEmpty(scenePath));
+            }
+
+            if (!string.IsNullOrEmpty(scenePath))
+            {
+                RetargetSceneRendererMaterials(scenePath, copiedAssetsMap, logEntries);
+            }
+        }
+
+        private static void RetargetPrefabAssetMaterials(
+            string prefabPath,
+            Dictionary<string, string> copiedAssetsMap,
+            List<string> logEntries,
+            bool reportMisses)
+        {
+            prefabPath = KaleidoAssetOrganizerHelpers.NormalizeAssetPath(prefabPath);
+            if (string.IsNullOrEmpty(prefabPath) || AssetDatabase.LoadMainAssetAtPath(prefabPath) == null) return;
+
+            GameObject contents = null;
+            try
+            {
+                contents = PrefabUtility.LoadPrefabContents(prefabPath);
+                if (contents == null) return;
+
+                try
+                {
+                    UnpackAllPrefabInstances(contents, null);
+                }
+                catch (Exception)
+                {
+                }
+
+                int materialSlots;
+                bool changed = RemapOrganizedObject(contents, copiedAssetsMap, null, out materialSlots);
+                if (changed)
+                {
+                    EditorUtility.SetDirty(contents);
+                    GameObject saved = PrefabUtility.SaveAsPrefabAsset(contents, prefabPath);
+                    if (saved == null)
+                    {
+                        if (logEntries != null) logEntries.Add("Could not save packed prefab materials: " + prefabPath);
+                    }
+                    else if (logEntries != null && materialSlots > 0)
+                    {
+                        logEntries.Add("Retargeted packed prefab materials: " + materialSlots);
+                    }
+                }
+
+                if (reportMisses) WarnIfRendererMaterialsStayOnSources(contents, copiedAssetsMap, logEntries);
+            }
+            catch (Exception ex)
+            {
+                if (logEntries != null) logEntries.Add("Packed prefab material retarget failed: " + prefabPath + " (" + ex.Message + ")");
+                Debug.LogWarning("[KaleidoVR] Packed prefab material retarget failed: " + prefabPath + " (" + ex.Message + ")");
+            }
+            finally
+            {
+                if (contents != null) PrefabUtility.UnloadPrefabContents(contents);
+            }
+
+            AssetDatabase.ImportAsset(prefabPath, ImportAssetOptions.ForceUpdate);
+        }
+
+        private static void RetargetSceneRendererMaterials(
+            string scenePath,
+            Dictionary<string, string> copiedAssetsMap,
+            List<string> logEntries)
+        {
+            scenePath = KaleidoAssetOrganizerHelpers.NormalizeAssetPath(scenePath);
+            if (string.IsNullOrEmpty(scenePath)) return;
+
+            bool openedHere = false;
+            Scene scene = default;
+            for (int i = 0; i < SceneManager.sceneCount; i++)
+            {
+                Scene loaded = SceneManager.GetSceneAt(i);
+                if (!loaded.IsValid() || !loaded.isLoaded) continue;
+                if (!string.Equals(loaded.path, scenePath, StringComparison.OrdinalIgnoreCase)) continue;
+                scene = loaded;
+                break;
+            }
+
+            if (!scene.IsValid() || !scene.isLoaded)
+            {
+                try
+                {
+                    scene = EditorSceneManager.OpenScene(scenePath, OpenSceneMode.Additive);
+                    openedHere = true;
+                }
+                catch (Exception ex)
+                {
+                    if (logEntries != null) logEntries.Add("Could not open organized scene to retarget materials: " + scenePath + " (" + ex.Message + ")");
+                    return;
+                }
+            }
+
+            if (!scene.IsValid() || !scene.isLoaded)
+            {
+                if (logEntries != null) logEntries.Add("Could not open organized scene to retarget materials: " + scenePath);
+                return;
+            }
+
+            try
+            {
+                int materialSlots = 0;
+                bool changed = false;
+                GameObject[] roots = scene.GetRootGameObjects();
+                if (roots != null)
+                {
+                    foreach (GameObject root in roots)
+                    {
+                        if (root == null) continue;
+                        int slots;
+                        if (RemapOrganizedObject(root, copiedAssetsMap, null, out slots)) changed = true;
+                        materialSlots += slots;
+                        WarnIfRendererMaterialsStayOnSources(root, copiedAssetsMap, logEntries);
+                    }
+                }
+
+                if (changed)
+                {
+                    EditorSceneManager.MarkSceneDirty(scene);
+                    EditorSceneManager.SaveScene(scene);
+                    if (materialSlots > 0 && logEntries != null)
+                    {
+                        logEntries.Add("Retargeted organized scene materials: " + materialSlots);
+                    }
+                }
+            }
+            finally
+            {
+                if (openedHere && scene.IsValid()) EditorSceneManager.CloseScene(scene, true);
+            }
+        }
+
+        private static void WarnIfRendererMaterialsStayOnSources(
+            GameObject root,
+            Dictionary<string, string> copiedAssetsMap,
+            List<string> logEntries)
+        {
+            string missed = FirstRendererMaterialStillOnSource(root, copiedAssetsMap);
+            if (string.IsNullOrEmpty(missed)) return;
+            string message = "Hierarchy material still on a previous file: " + missed;
+            if (logEntries != null) logEntries.Add(message);
+            Debug.LogWarning("[KaleidoVR] " + message);
+        }
+
+        private static string FirstRendererMaterialStillOnSource(GameObject root, Dictionary<string, string> copiedAssetsMap)
+        {
+            if (root == null || copiedAssetsMap == null || copiedAssetsMap.Count == 0) return null;
+
+            Renderer[] renderers = root.GetComponentsInChildren<Renderer>(true);
+            if (renderers == null) return null;
+            foreach (Renderer renderer in renderers)
+            {
+                if (renderer == null) continue;
+
+                Material[] materials;
+                try
+                {
+                    materials = renderer.sharedMaterials;
+                }
+                catch (Exception)
+                {
+                    continue;
+                }
+                if (materials == null) continue;
+
+                for (int i = 0; i < materials.Length; i++)
+                {
+                    if (materials[i] == null) continue;
+                    string path = KaleidoAssetOrganizerHelpers.NormalizeAssetPath(AssetDatabase.GetAssetPath(materials[i]));
+                    if (string.IsNullOrEmpty(path)) continue;
+                    if (!copiedAssetsMap.TryGetValue(path, out string dest)) continue;
+                    if (path.Equals(dest, StringComparison.OrdinalIgnoreCase)) continue;
+                    return path;
+                }
+            }
+
             return null;
         }
 

@@ -1,5 +1,8 @@
 What's new
 
+1.2.10
+I point the new Hierarchy at the materials from this organize. If you organize again from an earlier result, the new prefab and scene use the new Materials folder.
+
 1.2.9
 I put LilToon and Poiyomi Matcap slots in Textures/MatCaps. A file named like matcap stays in Textures/ if it is not in a slot.
 I keep names like SUYAO out of AO. Unity Normal maps and LilToon/Poiyomi Normal/Bump slots go to Textures/Normals. AO only matches a real AO token, like _ao or occlusion.
