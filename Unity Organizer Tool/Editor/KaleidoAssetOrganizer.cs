@@ -22,7 +22,7 @@ namespace KaleidoVR.EditorTools
     public class KaleidoAssetOrganizer : EditorWindow
     {
         // Each digit rolls 0-9. After 1.0.9 comes 1.1.0; after 1.9.9 comes 2.0.0.
-        public static readonly string VERSION = "1.2.13";
+        public static readonly string VERSION = "1.2.14";
         public static string ReleaseName { get { return "Asset Organizer " + VERSION; } }
         public const string LOGO_FILE_NAME = "Kali_Logo.png";
         public const string FALLBACK_ICON_PATH = "Assets/KaleidoVR/Editor/Icons/Kali_Logo.png";
@@ -1224,12 +1224,12 @@ namespace KaleidoVR.EditorTools
                     // Copy it to a unique path and never delete it, so this run stays isolated.
                     if (KaleidoAssetOrganizerHelpers.IsSameOrInside(path, window.outputDirectory))
                     {
-                        if (!TryCopyOrganizedAsset(path, window.outputDirectory, typeName, window.autoParsePoiyomi, copiedAssetsMap, copiedDestinations, movedAssetsMap, processedPaths, logEntries, "Isolated copy from existing organized file", out bool reusedOrganized))
+                        if (!TryCopyOrganizedAsset(path, window.outputDirectory, typeName, window.autoParsePoiyomi, copiedAssetsMap, copiedDestinations, movedAssetsMap, processedPaths, logEntries, "Isolated copy from existing organized file"))
                         {
                             movedAssetsMap[path] = path;
                             logEntries.Add("Already in output: " + path);
                         }
-                        else if (!reusedOrganized)
+                        else
                         {
                             copied++;
                         }
@@ -1248,14 +1248,9 @@ namespace KaleidoVR.EditorTools
 
                         // Both modes copy so the output always has new GUIDs. Move deletes
                         // the source files later, after remaining references are retargeted.
-                        if (!TryCopyOrganizedAsset(path, window.outputDirectory, typeName, window.autoParsePoiyomi, copiedAssetsMap, copiedDestinations, movedAssetsMap, processedPaths, logEntries, action == "Move" ? "Moved" : "Copied", out bool reusedCopy))
+                        if (!TryCopyOrganizedAsset(path, window.outputDirectory, typeName, window.autoParsePoiyomi, copiedAssetsMap, copiedDestinations, movedAssetsMap, processedPaths, logEntries, action == "Move" ? "Moved" : "Copied"))
                         {
                             Debug.LogWarning("[KaleidoVR] " + action + " failed for " + path);
-                            continue;
-                        }
-
-                        if (reusedCopy)
-                        {
                             continue;
                         }
 
@@ -1467,10 +1462,8 @@ namespace KaleidoVR.EditorTools
             Dictionary<string, string> movedAssetsMap,
             HashSet<string> processedPaths,
             List<string> logEntries,
-            string logPrefix,
-            out bool reused)
+            string logPrefix)
         {
-            reused = false;
             string normalizedSource = KaleidoAssetOrganizerHelpers.NormalizeAssetPath(path);
             string targetFolder = KaleidoAssetOrganizerHelpers.GetTargetFolder(
                 KaleidoAssetOrganizerHelpers.AliasOrganizeType(typeName), path, parsePoiyomi);
@@ -1484,15 +1477,6 @@ namespace KaleidoVR.EditorTools
 
             string targetPath = KaleidoAssetOrganizerHelpers.NormalizeAssetPath(
                 $"{outputDirectory}/{targetFolder}/{Path.GetFileName(path)}");
-            if (CanShareCopiedFile(path) && copiedDestinations != null && copiedDestinations.Contains(targetPath))
-            {
-                copiedAssetsMap[normalizedSource] = targetPath;
-                movedAssetsMap[normalizedSource] = targetPath;
-                reused = true;
-                if (logEntries != null) logEntries.Add("Reused copy: " + path + " -> " + targetPath);
-                return true;
-            }
-
             if (path.Equals(targetPath, StringComparison.OrdinalIgnoreCase)
                 || AssetDatabase.LoadMainAssetAtPath(targetPath) != null)
             {
@@ -1513,32 +1497,6 @@ namespace KaleidoVR.EditorTools
             if (IsModelFile(targetPath)) RemapModelImporterMaterials(targetPath, logEntries);
             if (logEntries != null) logEntries.Add(logPrefix + ": " + path + " -> " + targetPath);
             return true;
-        }
-
-        private static bool CanShareCopiedFile(string path)
-        {
-            if (string.IsNullOrEmpty(path) || IsModelFile(path)) return false;
-            string ext = Path.GetExtension(path);
-            if (string.IsNullOrEmpty(ext)) return false;
-            switch (ext.ToLowerInvariant())
-            {
-                case ".mat":
-                case ".png":
-                case ".jpg":
-                case ".jpeg":
-                case ".tga":
-                case ".psd":
-                case ".tif":
-                case ".tiff":
-                case ".exr":
-                case ".hdr":
-                case ".bmp":
-                case ".gif":
-                case ".asset":
-                    return true;
-                default:
-                    return false;
-            }
         }
 
         private static void KeepMovedSourcesIfStillReferenced(
@@ -1799,8 +1757,6 @@ namespace KaleidoVR.EditorTools
                 {
                     HarvestSerializedAssetReferences(target, assetPaths);
                 }
-
-                AddLiveRendererMaterialPaths(go, assetPaths, ignoredHierarchy);
 
                 try
                 {
@@ -2192,36 +2148,6 @@ namespace KaleidoVR.EditorTools
             if (KaleidoAssetOrganizerHelpers.ShouldIgnoreAsset(path)) return;
             if (!KaleidoAssetOrganizerHelpers.IsInsideAssets(path)) return;
             assetPaths.Add(path);
-        }
-
-        private static void AddLiveRendererMaterialPaths(GameObject root, HashSet<string> assetPaths, HashSet<GameObject> ignoredHierarchy)
-        {
-            if (root == null || assetPaths == null) return;
-
-            Renderer[] renderers = root.GetComponentsInChildren<Renderer>(true);
-            if (renderers == null) return;
-            foreach (Renderer renderer in renderers)
-            {
-                if (renderer == null) continue;
-                if (ignoredHierarchy != null && ignoredHierarchy.Contains(renderer.gameObject)) continue;
-
-                Material[] materials;
-                try
-                {
-                    materials = renderer.sharedMaterials;
-                }
-                catch (Exception)
-                {
-                    continue;
-                }
-                if (materials == null) continue;
-
-                for (int i = 0; i < materials.Length; i++)
-                {
-                    if (materials[i] == null) continue;
-                    AddAssetPath(AssetDatabase.GetAssetPath(materials[i]), assetPaths);
-                }
-            }
         }
 
         private enum AssetHarvestMode
@@ -4567,6 +4493,7 @@ namespace KaleidoVR.EditorTools
                 foreach (UnityEngine.Object asset in assets)
                 {
                     if (asset == null) continue;
+                    if (asset is Material lockedMat && IsPoiyomiLocked(lockedMat)) continue;
                     RemapSerializedReferences(asset, copiedAssetsMap);
                 }
             }

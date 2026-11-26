@@ -1,5 +1,8 @@
 What's new
 
+1.2.14
+I copy each material and texture into its own file again. I point that copy at the new textures, and I point the Hierarchy at the copy of the material you were already using.
+
 1.2.13
 I point each material's texture slots at the textures from this organize. I do that again after the Poiyomi lock, so the new material uses the new textures.
 
