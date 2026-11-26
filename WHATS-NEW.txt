@@ -1,25 +1,9 @@
 What's new
 
-1.2.16
-I make one new file of each original your avatar uses, and the new files only point at each other. I leave out materials your FBX import points at that the avatar never uses. If two files are the same file and one has a 1 or 2 added to the name, they share one new file without the number. Two different files with the same name each get their own copy, so Foreskin Front 0 and Foreskin Front 100 stay apart. If a controller uses clips from inside an FBX, I copy that FBX too.
-
-1.2.15
-I keep one new file for each material and texture. An older copy in that folder, including one ending in 1, is removed. The Hierarchy and the new material use those new files.
-
-1.2.14
-I copy each material and texture into its own file again. I point that copy at the new textures, and I point the Hierarchy at the copy of the material you were already using.
-
-1.2.13
-I point each material's texture slots at the textures from this organize. I do that again after the Poiyomi lock, so the new material uses the new textures.
-
-1.2.12
-Organize compiles again. 1.2.11 stopped on a duplicate name in the copy method. One material or texture still stays one file when this organize already copied it.
-
-1.2.11
-I keep one copy when this organize already copied that material or texture. The new folder keeps a single file, including when you organize from an earlier result.
-
 1.2.10
-I point the new Hierarchy at the materials from this organize. If you organize again from an earlier result, the new prefab and scene use the new Materials folder.
+I make one new file of each original your avatar uses, and the new files only point at each other. The new prefab and scene use those new materials, and each new material uses the new textures. That still holds after the Poiyomi lock, and when you organize again from an earlier result.
+I leave out materials your FBX import points at that the avatar never uses. If two files are the same file and one has a 1 or 2 added to the name, they share one new file without the number. Two different files with the same name each get their own copy, so Foreskin Front 0 and Foreskin Front 100 stay apart. If a controller uses clips from inside an FBX, I copy that FBX too.
+UI — Organize: Scene Name and Prefab Name fill with the object's name. I don't add Scene or Prefab to it.
 
 1.2.9
 I put LilToon and Poiyomi Matcap slots in Textures/MatCaps. A file named like matcap stays in Textures/ if it is not in a slot.
