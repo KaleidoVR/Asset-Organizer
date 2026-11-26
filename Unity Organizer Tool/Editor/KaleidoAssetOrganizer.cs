@@ -5529,8 +5529,8 @@ namespace KaleidoVR.EditorTools
             if (window == null) return;
             string baseName = SanitizeDroppedObjectName(objectName);
             if (string.IsNullOrEmpty(baseName)) baseName = "Avatar";
-            window.sceneName = baseName + " Scene";
-            window.prefabName = baseName + " Prefab";
+            window.sceneName = baseName;
+            window.prefabName = baseName;
         }
 
         private static string SanitizeDroppedObjectName(string objectName)
@@ -5543,6 +5543,8 @@ namespace KaleidoVR.EditorTools
                 name = name.Substring(0, name.Length - " Scene".Length).TrimEnd();
             if (name.EndsWith("_Scene", StringComparison.OrdinalIgnoreCase))
                 name = name.Substring(0, name.Length - "_Scene".Length).TrimEnd();
+            if (name.EndsWith("_Prefab", StringComparison.OrdinalIgnoreCase))
+                name = name.Substring(0, name.Length - "_Prefab".Length).TrimEnd();
             return name;
         }
 
