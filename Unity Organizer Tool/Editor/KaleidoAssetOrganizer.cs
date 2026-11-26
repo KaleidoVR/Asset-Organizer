@@ -22,7 +22,7 @@ namespace KaleidoVR.EditorTools
     public class KaleidoAssetOrganizer : EditorWindow
     {
         // Each digit rolls 0-9. After 1.0.9 comes 1.1.0; after 1.9.9 comes 2.0.0.
-        public static readonly string VERSION = "1.2.11";
+        public static readonly string VERSION = "1.2.12";
         public static string ReleaseName { get { return "Asset Organizer " + VERSION; } }
         public const string LOGO_FILE_NAME = "Kali_Logo.png";
         public const string FALLBACK_ICON_PATH = "Assets/KaleidoVR/Editor/Icons/Kali_Logo.png";
@@ -1465,6 +1465,7 @@ namespace KaleidoVR.EditorTools
             out bool reused)
         {
             reused = false;
+            string normalizedSource = KaleidoAssetOrganizerHelpers.NormalizeAssetPath(path);
             string targetFolder = KaleidoAssetOrganizerHelpers.GetTargetFolder(
                 KaleidoAssetOrganizerHelpers.AliasOrganizeType(typeName), path, parsePoiyomi);
             string localAssetFolder = $"{outputDirectory}/{targetFolder}".Replace("\\", "/");
@@ -1479,7 +1480,6 @@ namespace KaleidoVR.EditorTools
                 $"{outputDirectory}/{targetFolder}/{Path.GetFileName(path)}");
             if (CanShareCopiedFile(path) && copiedDestinations != null && copiedDestinations.Contains(targetPath))
             {
-                string normalizedSource = KaleidoAssetOrganizerHelpers.NormalizeAssetPath(path);
                 copiedAssetsMap[normalizedSource] = targetPath;
                 movedAssetsMap[normalizedSource] = targetPath;
                 reused = true;
@@ -1499,7 +1499,6 @@ namespace KaleidoVR.EditorTools
                 return false;
             }
 
-            string normalizedSource = KaleidoAssetOrganizerHelpers.NormalizeAssetPath(path);
             string normalizedTarget = KaleidoAssetOrganizerHelpers.NormalizeAssetPath(targetPath);
             copiedAssetsMap[normalizedSource] = normalizedTarget;
             copiedDestinations.Add(normalizedTarget);

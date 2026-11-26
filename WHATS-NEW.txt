@@ -1,5 +1,8 @@
 What's new
 
+1.2.12
+Organize compiles again. 1.2.11 stopped on a duplicate name in the copy method. One material or texture still stays one file when this organize already copied it.
+
 1.2.11
 I keep one copy when this organize already copied that material or texture. The new folder keeps a single file, including when you organize from an earlier result.
 
