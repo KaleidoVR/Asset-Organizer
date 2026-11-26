@@ -1,5 +1,8 @@
 What's new
 
+1.2.13
+I point each material's texture slots at the textures from this organize. I do that again after the Poiyomi lock, so the new material uses the new textures.
+
 1.2.12
 Organize compiles again. 1.2.11 stopped on a duplicate name in the copy method. One material or texture still stays one file when this organize already copied it.
 

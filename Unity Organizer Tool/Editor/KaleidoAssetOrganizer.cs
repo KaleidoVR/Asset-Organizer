@@ -22,7 +22,7 @@ namespace KaleidoVR.EditorTools
     public class KaleidoAssetOrganizer : EditorWindow
     {
         // Each digit rolls 0-9. After 1.0.9 comes 1.1.0; after 1.9.9 comes 2.0.0.
-        public static readonly string VERSION = "1.2.12";
+        public static readonly string VERSION = "1.2.13";
         public static string ReleaseName { get { return "Asset Organizer " + VERSION; } }
         public const string LOGO_FILE_NAME = "Kali_Logo.png";
         public const string FALLBACK_ICON_PATH = "Assets/KaleidoVR/Editor/Icons/Kali_Logo.png";
@@ -1281,6 +1281,7 @@ namespace KaleidoVR.EditorTools
                 // Copy and Move both land as new-GUID files. Remap those copies onto each other
                 // before the originals are deleted.
                 RemapCopiedAssetReferences(copiedAssetsMap, protectedAssetPaths);
+                RemapCopiedMaterialTextures(copiedAssetsMap, logEntries);
                 AssetDatabase.SaveAssets();
                 AssetDatabase.Refresh();
 
@@ -1433,6 +1434,11 @@ namespace KaleidoVR.EditorTools
                 {
                     RelockPoiyomiMaterials(poiyomiUnlockedToRelock, logEntries);
                     poiyomiUnlockedToRelock.Clear();
+                }
+                if (copiedAssetsMap.Count > 0)
+                {
+                    RemapCopiedMaterialTextures(copiedAssetsMap, logEntries);
+                    AssetDatabase.SaveAssets();
                 }
                 if (copiedAssetsMap.Count > 0
                     && (!string.IsNullOrEmpty(savedPrefabPath) || !string.IsNullOrEmpty(savedScenePath)))
@@ -4561,9 +4567,97 @@ namespace KaleidoVR.EditorTools
                 foreach (UnityEngine.Object asset in assets)
                 {
                     if (asset == null) continue;
-                    if (asset is Material lockedMat && IsPoiyomiLocked(lockedMat)) continue;
                     RemapSerializedReferences(asset, copiedAssetsMap);
                 }
+            }
+        }
+
+        private static void RemapCopiedMaterialTextures(Dictionary<string, string> copiedAssetsMap, List<string> logEntries)
+        {
+            if (copiedAssetsMap == null || copiedAssetsMap.Count == 0) return;
+
+            int changed = 0;
+            string missed = null;
+            HashSet<string> seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (string destPath in copiedAssetsMap.Values)
+            {
+                if (string.IsNullOrEmpty(destPath) || !seen.Add(destPath)) continue;
+                if (!destPath.EndsWith(".mat", StringComparison.OrdinalIgnoreCase)) continue;
+
+                Material material = AssetDatabase.LoadAssetAtPath<Material>(destPath);
+                if (material == null) continue;
+
+                string[] propertyNames;
+                try
+                {
+                    propertyNames = material.GetTexturePropertyNames();
+                }
+                catch (Exception)
+                {
+                    continue;
+                }
+                if (propertyNames == null) continue;
+
+                bool dirty = false;
+                for (int i = 0; i < propertyNames.Length; i++)
+                {
+                    string propertyName = propertyNames[i];
+                    if (string.IsNullOrEmpty(propertyName)) continue;
+
+                    Texture texture;
+                    try
+                    {
+                        texture = material.GetTexture(propertyName);
+                    }
+                    catch (Exception)
+                    {
+                        continue;
+                    }
+                    if (texture == null) continue;
+
+                    Texture remapped = RemapReferencedObject(texture, copiedAssetsMap) as Texture;
+                    if (remapped == null || remapped == texture) continue;
+
+                    try
+                    {
+                        material.SetTexture(propertyName, remapped);
+                        dirty = true;
+                        changed++;
+                    }
+                    catch (Exception)
+                    {
+                    }
+
+                    Texture current;
+                    try
+                    {
+                        current = material.GetTexture(propertyName);
+                    }
+                    catch (Exception)
+                    {
+                        continue;
+                    }
+                    if (current == null || missed != null) continue;
+                    string currentPath = KaleidoAssetOrganizerHelpers.NormalizeAssetPath(AssetDatabase.GetAssetPath(current));
+                    if (string.IsNullOrEmpty(currentPath)) continue;
+                    if (!copiedAssetsMap.TryGetValue(currentPath, out string mapped)) continue;
+                    if (currentPath.Equals(mapped, StringComparison.OrdinalIgnoreCase)) continue;
+                    missed = currentPath;
+                }
+
+                if (!dirty) continue;
+                EditorUtility.SetDirty(material);
+            }
+
+            if (changed > 0 && logEntries != null)
+            {
+                logEntries.Add("Retargeted material textures: " + changed);
+            }
+            if (!string.IsNullOrEmpty(missed))
+            {
+                string message = "Material texture still on a previous file: " + missed;
+                if (logEntries != null) logEntries.Add(message);
+                Debug.LogWarning("[KaleidoVR] " + message);
             }
         }
 
