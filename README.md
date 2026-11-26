@@ -120,7 +120,7 @@ That tree is the default. **Settings (Beta)** can rename any of those folders or
 
 ## How references are kept intact
 
-Copies are made through the Unity asset database rather than by copying files and their `.meta` on disk. Each copy therefore gets its own GUID, and the tool then rewrites the serialized references of the copied assets and the generated prefab to point at the new files. The new Hierarchy uses those copied materials when you organize from an earlier result. I point those materials at the textures from this organize.
+Copies are made through the Unity asset database rather than by copying files and their `.meta` on disk. Each copy therefore gets its own GUID, and the tool then rewrites the serialized references of the copied assets and the generated prefab to point at the new files. The new Hierarchy uses those copied materials when you organize from an earlier result. I point those materials at the textures from this organize. I keep one new file for each name, and I remove an older copy in that folder, including one ending in 1.
 
 This matters because duplicating a `.meta` file duplicates its GUID, which leaves two assets claiming the same identity and causes materials, controllers, and prefabs to resolve to the wrong file.
 

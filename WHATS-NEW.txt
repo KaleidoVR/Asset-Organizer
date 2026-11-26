@@ -1,5 +1,8 @@
 What's new
 
+1.2.15
+I keep one new file for each material and texture. An older copy in that folder, including one ending in 1, is removed. The Hierarchy and the new material use those new files.
+
 1.2.14
 I copy each material and texture into its own file again. I point that copy at the new textures, and I point the Hierarchy at the copy of the material you were already using.
 

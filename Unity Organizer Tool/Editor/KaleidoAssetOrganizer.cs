@@ -22,7 +22,7 @@ namespace KaleidoVR.EditorTools
     public class KaleidoAssetOrganizer : EditorWindow
     {
         // Each digit rolls 0-9. After 1.0.9 comes 1.1.0; after 1.9.9 comes 2.0.0.
-        public static readonly string VERSION = "1.2.14";
+        public static readonly string VERSION = "1.2.15";
         public static string ReleaseName { get { return "Asset Organizer " + VERSION; } }
         public const string LOGO_FILE_NAME = "Kali_Logo.png";
         public const string FALLBACK_ICON_PATH = "Assets/KaleidoVR/Editor/Icons/Kali_Logo.png";
@@ -1476,27 +1476,98 @@ namespace KaleidoVR.EditorTools
             }
 
             string targetPath = KaleidoAssetOrganizerHelpers.NormalizeAssetPath(
-                $"{outputDirectory}/{targetFolder}/{Path.GetFileName(path)}");
-            if (path.Equals(targetPath, StringComparison.OrdinalIgnoreCase)
-                || AssetDatabase.LoadMainAssetAtPath(targetPath) != null)
+                $"{outputDirectory}/{targetFolder}/{CleanCopiedFileName(Path.GetFileName(path))}");
+            if (copiedDestinations.Contains(targetPath))
             {
-                targetPath = AssetDatabase.GenerateUniqueAssetPath(targetPath);
+                copiedAssetsMap[normalizedSource] = targetPath;
+                movedAssetsMap[normalizedSource] = targetPath;
+                if (logEntries != null) logEntries.Add(logPrefix + ": " + path + " -> " + targetPath);
+                return true;
             }
 
-            if (!AssetDatabase.CopyAsset(path, targetPath))
+            bool replacedExisting = false;
+            if (path.Equals(targetPath, StringComparison.OrdinalIgnoreCase))
             {
-                if (logEntries != null) logEntries.Add(logPrefix + " failed: " + path);
-                return false;
+                string tempPath = AssetDatabase.GenerateUniqueAssetPath(targetPath);
+                if (string.IsNullOrEmpty(tempPath) || !AssetDatabase.CopyAsset(path, tempPath))
+                {
+                    if (logEntries != null) logEntries.Add(logPrefix + " failed: " + path);
+                    return false;
+                }
+                AssetDatabase.DeleteAsset(path);
+                string moveError = AssetDatabase.MoveAsset(tempPath, targetPath);
+                if (!string.IsNullOrEmpty(moveError))
+                {
+                    if (logEntries != null) logEntries.Add(logPrefix + " failed: " + path + " (" + moveError + ")");
+                    return false;
+                }
+                replacedExisting = true;
+            }
+            else
+            {
+                if (AssetDatabase.LoadMainAssetAtPath(targetPath) != null
+                    && KaleidoAssetOrganizerHelpers.IsSameOrInside(targetPath, outputDirectory))
+                {
+                    AssetDatabase.DeleteAsset(targetPath);
+                    replacedExisting = true;
+                }
+
+                if (!AssetDatabase.CopyAsset(path, targetPath))
+                {
+                    if (AssetDatabase.LoadMainAssetAtPath(targetPath) != null)
+                    {
+                        targetPath = AssetDatabase.GenerateUniqueAssetPath(targetPath);
+                    }
+                    if (string.IsNullOrEmpty(targetPath) || !AssetDatabase.CopyAsset(path, targetPath))
+                    {
+                        if (logEntries != null) logEntries.Add(logPrefix + " failed: " + path);
+                        return false;
+                    }
+                }
             }
 
             string normalizedTarget = KaleidoAssetOrganizerHelpers.NormalizeAssetPath(targetPath);
             copiedAssetsMap[normalizedSource] = normalizedTarget;
             copiedDestinations.Add(normalizedTarget);
             movedAssetsMap[normalizedSource] = normalizedTarget;
-            processedPaths.Add(targetPath);
-            if (IsModelFile(targetPath)) RemapModelImporterMaterials(targetPath, logEntries);
-            if (logEntries != null) logEntries.Add(logPrefix + ": " + path + " -> " + targetPath);
+            processedPaths.Add(normalizedTarget);
+            if (IsModelFile(normalizedTarget)) RemapModelImporterMaterials(normalizedTarget, logEntries);
+            RemoveNumberedCopies(normalizedTarget, copiedDestinations, logEntries);
+            if (replacedExisting && logEntries != null) logEntries.Add("Removed old copy: " + normalizedTarget);
+            if (logEntries != null) logEntries.Add(logPrefix + ": " + path + " -> " + normalizedTarget);
             return true;
+        }
+
+        private static string CleanCopiedFileName(string fileName)
+        {
+            if (string.IsNullOrEmpty(fileName)) return fileName;
+            string extension = Path.GetExtension(fileName);
+            string stem = Path.GetFileNameWithoutExtension(fileName);
+            int space = stem.LastIndexOf(' ');
+            if (space <= 0 || space >= stem.Length - 1) return fileName;
+            string tail = stem.Substring(space + 1);
+            for (int i = 0; i < tail.Length; i++)
+            {
+                if (tail[i] < '0' || tail[i] > '9') return fileName;
+            }
+            return stem.Substring(0, space) + extension;
+        }
+
+        private static void RemoveNumberedCopies(string targetPath, HashSet<string> keep, List<string> logEntries)
+        {
+            string directory = Path.GetDirectoryName(targetPath);
+            if (string.IsNullOrEmpty(directory)) return;
+            directory = directory.Replace("\\", "/");
+            string extension = Path.GetExtension(targetPath);
+            string stem = Path.GetFileNameWithoutExtension(targetPath);
+            for (int number = 1; number <= 30; number++)
+            {
+                string extra = KaleidoAssetOrganizerHelpers.NormalizeAssetPath(directory + "/" + stem + " " + number + extension);
+                if (keep != null && keep.Contains(extra)) continue;
+                if (AssetDatabase.LoadMainAssetAtPath(extra) == null) continue;
+                if (!AssetDatabase.DeleteAsset(extra)) continue;
+                if (logEntries != null) logEntries.Add("Removed old copy: " + extra);
+            }
         }
 
         private static void KeepMovedSourcesIfStillReferenced(
